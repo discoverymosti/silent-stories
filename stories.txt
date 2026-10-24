@@ -1,0 +1,24 @@
+# Queue: one idea per line as  genre | idea
+# genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
+# The top line is published next. Mix genres to find what your audience likes.
+
+story | The Last Seat: on a crowded bus a tired student gives his seat to an old woman, and the kindness quietly passes from stranger to stranger
+explainer | How a zipper works: the tiny teeth, the slider wedge, and why it never needs glue
+story | A father secretly skips his own lunch every day so his daughter can buy hers; years later she notices
+fact | Why the ocean is salty: rivers carry minerals for millions of years and the sea never lets them go
+story | A street dog follows a delivery rider every morning until one rainy day the rider finally stops
+explainer | How a seed becomes a tree: from one small seed to a forest, step by step
+story | An old shopkeeper keeps a jar of free sweets for children who cannot pay; one of them comes back grown up
+fact | Honey never spoils: sealed jars from ancient tombs are still edible
+story | A girl practises dancing alone on a rooftop every evening until the whole street starts watching
+explainer | How coffee gets from a red cherry on a hill to your morning cup
+story | A grandfather teaches his grandson to ride a bicycle, then years later the roles reverse with a wheelchair
+fact | One tree can make enough oxygen in a year for two people
+story | A lost child in a busy market, a stranger kneels down, and a small act brings a family back together
+explainer | How paper is made: from forest to pulp to the page you write on
+story | A boy collects plastic bottles from the beach every day; at first alone, then never alone
+fact | Octopuses have three hearts and blue blood
+story | A night-shift nurse's coffee goes cold every night until a patient's family leaves her a warm cup
+explainer | How a lighthouse guides ships through the dark
+story | Two strangers share one umbrella in sudden rain and walk the same way for longer than they need to
+fact | Bananas grow pointing up toward the sun
