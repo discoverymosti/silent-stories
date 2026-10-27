@@ -39,8 +39,8 @@ W, H, FPS = 1080, 1920, 30
 XF = 0.5  # crossfade seconds
 FONT = os.getenv("CAPTION_FONT", "Noto Sans")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")  # empty = auto-pick newest
+GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "")  # empty = auto-pick newest
 VISUAL_MODE = os.getenv("VISUAL_MODE", "ai").lower()  # ai | stock
 PRIVACY = os.getenv("YT_PRIVACY", "private")
 SKIP_UPLOAD = os.getenv("SKIP_UPLOAD", "false").lower() == "true"
@@ -122,9 +122,52 @@ Return ONLY valid JSON with exactly these keys:
                "caption": str, "seconds": number}}]}}"""
 
 
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+_model_cache: dict[str, str | None] = {}
+
+
+def _version_key(name: str) -> tuple:
+    nums = [float(x) for x in re.findall(r"(\d+(?:\.\d+)?)", name.split("/")[-1])[:1]] or [0.0]
+    stable = 0 if re.search(r"preview|exp|experimental", name) else 1
+    return (stable, nums[0], -len(name))
+
+
+def pick_gemini_model(kind: str) -> str | None:
+    """Auto-discover the newest usable Gemini model ('text' or 'image') for this API key,
+    so the pipeline keeps working when Google retires old model names."""
+    if kind in _model_cache:
+        return _model_cache[kind]
+    wanted = GEMINI_MODEL if kind == "text" else GEMINI_IMAGE_MODEL
+    try:
+        r = requests.get(f"{GEMINI_BASE}/models", params={"pageSize": 1000},
+                         headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, timeout=60)
+        r.raise_for_status()
+        models = [m for m in r.json().get("models", [])
+                  if "generateContent" in m.get("supportedGenerationMethods", [])]
+    except requests.RequestException as e:
+        print(f"  could not list Gemini models ({e}); using {wanted}")
+        _model_cache[kind] = wanted
+        return wanted
+    names = [m["name"].split("/")[-1] for m in models]
+    if wanted in names:
+        choice = wanted
+    else:
+        if kind == "text":
+            pool = [n for n in names if "flash" in n and not re.search(r"image|tts|audio|live|lite|embed|thinking", n)]
+        else:
+            pool = [n for n in names if "image" in n and "gemini" in n]
+        choice = max(pool, key=_version_key) if pool else None
+    print(f"  Gemini {kind} model: {choice}")
+    _model_cache[kind] = choice
+    return choice
+
+
 def ask_gemini(prompt: str) -> str:
+    model = pick_gemini_model("text")
+    if not model:
+        raise SystemExit("No Gemini text model available for this API key.")
     r = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+        f"{GEMINI_BASE}/models/{model}:generateContent",
         headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
         json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
               "generationConfig": {"responseMimeType": "application/json", "temperature": 0.9}},
@@ -178,9 +221,13 @@ def gen_image_gemini(prompt: str, dest: Path) -> bool:
     global _gemini_img_ok
     if not (_gemini_img_ok and os.getenv("GEMINI_API_KEY")):
         return False
+    model = pick_gemini_model("image")
+    if not model:
+        _gemini_img_ok = False
+        return False
     try:
         r = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_IMAGE_MODEL}:generateContent",
+            f"{GEMINI_BASE}/models/{model}:generateContent",
             headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
             json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
                   "generationConfig": {"responseModalities": ["IMAGE"],

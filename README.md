@@ -47,8 +47,8 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 | Variable | Default |
 |---|---|
 | `YT_PRIVACY` | `private` |
-| `GEMINI_MODEL` | `gemini-2.5-flash` |
-| `GEMINI_IMAGE_MODEL` | `gemini-2.5-flash-image` |
+| `GEMINI_MODEL` | auto (newest Gemini Flash) |
+| `GEMINI_IMAGE_MODEL` | auto (newest Gemini image model) |
 | `VISUAL_MODE` | `ai` (original AI images) or `stock` (Pixabay/Pexels) |
 | `CHANNEL_NAME` | `Silent Stories` (shown on end card) |
 | `CHANNEL_HASHTAG` | `#SilentStories` |
