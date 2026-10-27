@@ -1,6 +1,9 @@
 name: Connect YouTube channel
 
 on:
+  # also runs when auth_code.txt (the pasted localhost address) is pushed
+  push:
+    paths: [auth_code.txt, .github/workflows/connect-youtube.yml]
   workflow_dispatch:
     inputs:
       code:
@@ -29,13 +32,15 @@ jobs:
           AUTH_CODE: ${{ inputs.code }}
         run: |
           pip install -q requests
+          if [ -z "$AUTH_CODE" ] && [ -s auth_code.txt ]; then export AUTH_CODE="$(cat auth_code.txt)"; fi
           python scripts/connect_ci.py
 
       - name: Save encrypted token
-        if: inputs.code != ''
+        if: hashFiles('yt_token.enc') != ''
         run: |
+          git rm -q --ignore-unmatch auth_code.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add yt_token.enc
+          git add -A yt_token.enc
           git diff --cached --quiet || git commit -m "chore: connect YouTube channel [skip ci]"
           git push
