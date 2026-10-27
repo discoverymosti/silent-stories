@@ -3,7 +3,7 @@
 Automated YouTube Shorts channel. **No voice, no language barrier**: stories told with footage, short captions and music, so they work worldwide.
 
 ```
-stories.txt ─► Gemini storyboard ─► Pexels vertical footage ─► ffmpeg 1080×1920
+stories.txt ─► Gemini storyboard ─► Pixabay/Pexels footage ─► ffmpeg 1080×1920
            (scenes, captions, mood)                         (fades, animated captions,
                                                              ambient music, end card)
                                                 ─► YouTube Short (daily, 18:00 IST)
@@ -18,7 +18,8 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 |---|---|---|
 | `GEMINI_API_KEY` | aistudio.google.com → Get API key | free tier |
 | `ANTHROPIC_API_KEY` *(optional, instead of Gemini)* | console.anthropic.com → API Keys | ~₹1–2 per video |
-| `PEXELS_API_KEY` | pexels.com/api → "Get started" | free |
+| `PIXABAY_API_KEY` | pixabay.com/api/docs (sign in, key is shown on the page) | free |
+| `PEXELS_API_KEY` *(optional extra source)* | pexels.com/api | free |
 | `YT_CLIENT_ID` / `YT_CLIENT_SECRET` / `YT_REFRESH_TOKEN` | step 2 | free |
 
 ### 2. Connect your YouTube channel
@@ -54,4 +55,5 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 - **Unverified API project:** YouTube may lock API uploads to *private* until your Google Cloud project passes the [YouTube API audit](https://support.google.com/youtube/contact/yt_api_form). Until then, flip each video to public in YouTube Studio (one click), or submit the audit form.
 - **Quota:** 10,000 units/day; one upload = 1,600, so up to 6/day.
 - **Reused content policy:** YouTube demonetises low-effort mass-produced content. Keep ideas original, check previews, and mix in some hand-made Shorts. Monetisation needs 1,000 subs + 10M Shorts views in 90 days.
+- **Footage credit:** Pixabay and Pexels licences allow commercial use without attribution; the description still says "Footage: Pixabay/Pexels".
 - **Cross-posting:** the same `short.mp4` works on Instagram Reels and TikTok. Download it from Artifacts.

@@ -5,7 +5,7 @@ No voiceover. Visuals + animated captions + music only, so it works in every lan
 
 1. Take the next idea from stories.txt
 2. Gemini (or Claude) writes a storyboard (scenes, captions, music mood, title, tags)
-3. Pexels supplies vertical stock footage for each scene
+3. Pixabay / Pexels supply stock footage for each scene
 4. ffmpeg builds a 1080x1920 video with fades, captions and an ambient soundtrack
 5. YouTube Data API uploads it as a Short
 """
@@ -156,10 +156,37 @@ def pexels_search(query: str, used: set[int]) -> str | None:
     return None
 
 
+def pixabay_search(query: str, used: set[int]) -> str | None:
+    key = os.getenv("PIXABAY_API_KEY")
+    if not key:
+        return None
+    r = requests.get(
+        "https://pixabay.com/api/videos/",
+        params={"key": key, "q": query[:100], "per_page": 20, "safesearch": "true", "order": "popular"},
+        timeout=30,
+    )
+    if r.status_code != 200:
+        print(f"  pixabay {r.status_code} for '{query}'")
+        return None
+    hits = [h for h in r.json().get("hits", []) if h["id"] not in used and h.get("duration", 0) >= 3]
+    # prefer vertical clips; landscape ones are centre-cropped to 9:16
+    hits.sort(key=lambda h: h["videos"]["medium"].get("height", 0) <= h["videos"]["medium"].get("width", 1))
+    for h in hits:
+        for size in ("large", "medium"):
+            v = h["videos"].get(size) or {}
+            if v.get("url") and min(v.get("width", 0), v.get("height", 0)) >= 720:
+                used.add(h["id"])
+                return v["url"]
+    return None
+
+
+SOURCES = (pixabay_search, pexels_search)
+
+
 def fetch_clip(query: str, dest: Path, used: set[int]) -> bool:
     words = query.split()
-    for q in (query, " ".join(words[-2:]), words[-1]):
-        url = pexels_search(q, used)
+    for q in dict.fromkeys((query, " ".join(words[-2:]), words[-1])):
+        url = next((u for src in SOURCES if (u := src(q, used))), None)
         if url:
             with requests.get(url, stream=True, timeout=120) as r:
                 r.raise_for_status()
@@ -330,7 +357,7 @@ def upload(video: Path, sb: dict) -> str:
     yt = build("youtube", "v3", credentials=creds, cache_discovery=False)
     tags = [t.lstrip("#") for t in sb.get("tags", [])][:12]
     description = (f"{sb['description']}\n\n{CHANNEL_TAG} #Shorts #NoWords "
-                   f"#{tags[0].replace(' ', '') if tags else 'Story'}\n\nFootage: Pexels")
+                   f"#{tags[0].replace(' ', '') if tags else 'Story'}\n\nFootage: Pixabay / Pexels")
     body = {
         "snippet": {
             "title": f"{sb['title'][:85]} #Shorts",
