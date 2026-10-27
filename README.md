@@ -42,6 +42,28 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 - Run once with *Preview only* unticked. The Short uploads as **private**. Check it in YouTube Studio.
 - Happy? Repo → Settings → Variables → add `YT_PRIVACY` = `public`. From then on it posts daily on its own.
 
+## Cross-posting: Instagram, Facebook Page, X
+After each **public** YouTube upload the workflow also posts:
+- **Instagram:** the Short as a Reel (films stay on YouTube/Facebook, Reels are vertical)
+- **Facebook Page:** the Short as a Page Reel, the weekly film as a Page video
+- **X:** title + hashtags + YouTube link
+
+Nothing is cross-posted while `YT_PRIVACY` is `private`, so review uploads stay private. Each platform is optional and a failure on one never stops the others.
+
+**Facebook Page + Instagram (one-time, ~15 min, free):**
+1. Instagram must be a **Professional** account (Creator or Business) **linked to your Facebook Page** (Instagram → Settings → Accounts Center, or Page settings → Linked accounts).
+2. developers.facebook.com → **My Apps → Create app** → use case *"Manage everything on your Page"* plus *"Manage messaging & content on Instagram"* (or type **Business**).
+3. App settings → Basic: copy **App ID** and **App secret**. Add the privacy policy URL `https://github.com/discoverymosti/silent-stories/blob/main/PRIVACY.md`.
+4. **Tools → Graph API Explorer:** choose your app, *Get User Access Token* with `pages_show_list, pages_read_engagement, pages_manage_posts, instagram_basic, instagram_content_publish, business_management`, then **Generate Access Token** and approve your Page + Instagram.
+5. GitHub secrets: `META_APP_ID`, `META_APP_SECRET`, `META_USER_TOKEN` (the token from step 4). Optional variable `META_PAGE_NAME` if you manage several Pages.
+6. **Actions → Connect Facebook & Instagram → Run workflow.** The log shows the Page and @instagram it connected. It saves a non-expiring Page token encrypted as `meta_token.enc`; you can then delete `META_USER_TOKEN`.
+7. Switch the app to **Live** (top bar) so posts are public.
+
+**X (one-time, ~10 min):**
+1. developer.x.com → sign up for the **Free** tier → your Project's App → **User authentication settings**: *Read and write*.
+2. **Keys and tokens:** copy *API Key*, *API Key Secret*, then generate *Access Token* and *Secret* (after setting Read and write).
+3. GitHub secrets: `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_SECRET`.
+
 ## Weekly short film
 Every **Sunday 16:10 UTC** (12:10 New York, 17:10 Paris, 21:40 India) the same workflow makes a **~3 minute widescreen (16:9) silent short film**: 18-24 AI scenes in three acts, captions, original score, watermark and thumbnail. It uploads as a normal video (not a Short), from the queue in `films.txt`.
 Run one now: **Actions → Silent Stories - Publish Short → Run workflow → format: film**.
@@ -87,6 +109,8 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 | YouTube Data API | upload + thumbnail | 10,000 quota units/day | ~1,650 units/video | free |
 | Google Cloud project (OAuth) | sign-in for uploads | free, no billing account needed | n/a | free |
 | Music | original synthesized score | n/a | n/a | free |
+| Meta Graph API | Instagram Reels + Facebook Page | free (rate limits: 50 IG posts/day) | 1-2 posts/day | free |
+| X API (Free tier) | posts with the YouTube link | free write tier (check developer.x.com for the current monthly post cap) | ~2 posts/day | free |
 
 **What would cost money (only if you turn it on):** enabling billing on the Gemini API key (Gemini images, about $0.04/image ≈ $15-20/month for daily Shorts), Cloudflare Workers Paid ($5/month, only if you want more than ~10k neurons/day, e.g. more videos per day), making the repo **private** (GitHub Free includes 2,000 Actions minutes/month, enough for this; beyond that ~$0.008/min), or `ANTHROPIC_API_KEY` instead of Gemini (~₹1-2/video). Never add a payment method you don't intend to use.
 

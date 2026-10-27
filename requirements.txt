@@ -3,3 +3,4 @@ requests>=2.31
 google-api-python-client>=2.140
 google-auth>=2.30
 google-auth-oauthlib>=1.2
+requests-oauthlib>=1.3

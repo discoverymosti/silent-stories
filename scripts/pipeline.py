@@ -959,6 +959,10 @@ def main() -> int:
         return 0
     vid = upload(final, thumb, meta)
     mark_done(idea, vid)
+    # crosspost.py (next workflow step) shares this upload on Instagram / Facebook / X
+    meta.update(report=report, format=FORMAT, privacy=PRIVACY,
+                youtube_url=f"https://youtu.be/{vid}" if FILM else f"https://youtube.com/shorts/{vid}")
+    (OUT / "metadata.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     return 0
 
 

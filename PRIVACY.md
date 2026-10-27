@@ -9,10 +9,16 @@ DiscoveryMosti YouTube channel. It is used only by its owner to upload videos to
 to upload videos, set thumbnails and read the owner's own channel name. It does not access any
 other user's data.
 
+**Social platforms.** With the owner's permission, the tool also publishes the same videos to the
+owner's own Facebook Page and linked Instagram professional account (Meta Graph API) and posts a
+link on the owner's X account (X API). It only creates posts on these accounts and reads their
+names/IDs to confirm the connection.
+
 **Data storage.** The OAuth client credentials are stored as encrypted GitHub Actions secrets.
 The YouTube refresh token is stored either as a GitHub Actions secret or as an AES-256 encrypted
 file in the repository that can only be decrypted with the client secret held in those secrets.
-No personal data is collected, sold or shared with third parties.
+The Facebook Page token is stored the same way (AES-256 encrypted file, key in GitHub secrets);
+X keys are GitHub Actions secrets. No personal data is collected, sold or shared with third parties.
 
 **Revoking access.** Access can be revoked at any time at https://myaccount.google.com/permissions.
 
