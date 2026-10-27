@@ -6,7 +6,7 @@ Automated YouTube Shorts channel. **No voice, no language barrier**: stories tol
 stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI images per scene (Gemini → Cloudflare FLUX → Pollinations,
                                                stock footage fallback)
            ─► auto-edit: Ken Burns moves, crossfades, film look, captions, original music
-           ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (daily 18:00 IST)
+           ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (daily 14:40 UTC)
 ```
 
 ## One-time setup (≈25 min)
@@ -43,7 +43,7 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 - Happy? Repo → Settings → Variables → add `YT_PRIVACY` = `public`. From then on it posts daily on its own.
 
 ## Weekly short film
-Every **Sunday 19:10 IST** the same workflow makes a **~3 minute widescreen (16:9) silent short film**: 26-34 AI scenes in three acts, captions, original score, watermark and thumbnail. It uploads as a normal video (not a Short), from the queue in `films.txt`.
+Every **Sunday 16:10 UTC** (12:10 New York, 17:10 Paris, 21:40 India) the same workflow makes a **~3 minute widescreen (16:9) silent short film**: 26-34 AI scenes in three acts, captions, original score, watermark and thumbnail. It uploads as a normal video (not a Short), from the queue in `films.txt`.
 Run one now: **Actions → Silent Stories - Publish Short → Run workflow → format: film**.
 
 ## Watermark
@@ -52,7 +52,7 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 ## Daily use
 - **Add ideas** to `stories.txt` (`genre | idea`), editing it on github.com works fine. Each upload removes the top line and logs the link in `done.txt`.
 - **Better music:** drop royalty-free mp3s in `music/` (see `music/README.md`). Without them, a generated ambient pad is used.
-- **Change schedule:** edit the `cron` line in `.github/workflows/publish.yml` (times are UTC; `30 12` = 18:00 IST).
+- **Change schedule:** edit the `cron` line in `.github/workflows/publish.yml` (times are UTC; `40 14` = 14:40 UTC, `10 16 * * 0` = Sunday film).
 
 ## Optional variables
 | Variable | Default |
@@ -72,6 +72,18 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 - Music: synthesized in the pipeline (original), or your own royalty-free files in `music/`.
 - AI disclosure: uploads set *altered or synthetic content* when AI visuals are used, as YouTube requires.
 - Custom thumbnails need a phone-verified channel: youtube.com/verify
+
+## Monthly cost: ₹0 / $0 with the current setup
+| Service | Used for | Free allowance | This channel uses | Cost |
+|---|---|---|---|---|
+| GitHub Actions | rendering + uploading | unlimited minutes on a **public** repo | ~10 min/day + ~40 min/week | free |
+| Gemini API (AI Studio, free tier) | storyboard, SEO title/description/tags | free-tier daily request limits | 1 request/video | free |
+| Cloudflare Workers AI (FLUX) | AI images | 10,000 neurons/day | ~12 images/Short, ~32/film: well under the limit | free |
+| YouTube Data API | upload + thumbnail | 10,000 quota units/day | ~1,650 units/video | free |
+| Google Cloud project (OAuth) | sign-in for uploads | free, no billing account needed | n/a | free |
+| Music | original synthesized score | n/a | n/a | free |
+
+**What would cost money (only if you turn it on):** enabling billing on the Gemini API key (Gemini images, about $0.04/image ≈ $15-20/month for daily Shorts), Cloudflare Workers Paid ($5/month, only if you exceed 10k neurons/day), making the repo **private** (GitHub Free includes 2,000 Actions minutes/month, enough for this; beyond that ~$0.008/min), or `ANTHROPIC_API_KEY` instead of Gemini (~₹1-2/video). Never add a payment method you don't intend to use.
 
 ## Good to know
 - **Unverified API project:** YouTube may lock API uploads to *private* until your Google Cloud project passes the [YouTube API audit](https://support.google.com/youtube/contact/yt_api_form). Until then, flip each video to public in YouTube Studio (one click), or submit the audit form.

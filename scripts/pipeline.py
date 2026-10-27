@@ -87,6 +87,9 @@ def mark_done(idea: str, video_id: str | None) -> None:
 STORYBOARD_PROMPT = """You are the director and growth marketer of "{channel}", a YouTube
 Shorts channel. Videos have NO voiceover and NO dialogue: they tell a story only through
 cinematic images, very short on-screen captions and music, so anyone in any country can follow.
+The audience is GLOBAL (Americas, Europe, Asia, Africa, Middle East): use universal emotions and
+settings, characters of varied ethnicities and cultures, no country-specific festivals, slang or
+symbols unless the idea itself needs them, and simple English any viewer can read.
 
 Genre: {genre}   ("story" = emotional micro-drama / short film, "explainer" = how something
                   works, "fact" = surprising true fact told visually)
@@ -382,17 +385,18 @@ def pexels_search(query: str, used: set[int]) -> str | None:
     if not key:
         return None
     r = requests.get("https://api.pexels.com/videos/search", headers={"Authorization": key},
-                     params={"query": query, "orientation": "portrait", "per_page": 15}, timeout=30)
+                     params={"query": query, "orientation": "landscape" if FILM else "portrait", "per_page": 15}, timeout=30)
     if r.status_code != 200:
         return None
     for v in r.json().get("videos", []):
         if v["id"] in used or v.get("duration", 0) < 3:
             continue
         files = [f for f in v["video_files"] if f.get("height") and f.get("width")
-                 and f["height"] >= f["width"] and f["height"] >= 1280 and f.get("file_type") == "video/mp4"]
+                 and (f["width"] >= f["height"]) == FILM and max(f["width"], f["height"]) >= 1280
+                 and f.get("file_type") == "video/mp4"]
         if files:
             used.add(v["id"])
-            return min(files, key=lambda f: abs(f["height"] - 1920))["link"]
+            return min(files, key=lambda f: abs(max(f["width"], f["height"]) - 1920))["link"]
     return None
 
 
@@ -405,7 +409,8 @@ def pixabay_search(query: str, used: set[int]) -> str | None:
     if r.status_code != 200:
         return None
     hits = [h for h in r.json().get("hits", []) if h["id"] not in used and h.get("duration", 0) >= 3]
-    hits.sort(key=lambda h: h["videos"]["medium"].get("height", 0) <= h["videos"]["medium"].get("width", 1))
+    # prefer clips whose orientation matches the frame
+    hits.sort(key=lambda h: (h["videos"]["medium"].get("height", 0) > h["videos"]["medium"].get("width", 1)) == FILM)
     for h in hits:
         for size in ("large", "medium"):
             v = h["videos"].get(size) or {}
@@ -555,12 +560,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     dest.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
 
 
-CHORDS = {  # slow 2-chord loop per mood (original synthesized music, no copyright)
-    "warm":      [(261.6, 329.6, 392.0), (220.0, 261.6, 329.6)],
-    "sad":       [(220.0, 261.6, 329.6), (174.6, 220.0, 261.6)],
-    "tense":     [(196.0, 233.1, 293.7), (185.0, 233.1, 277.2)],
-    "curious":   [(293.7, 349.2, 440.0), (261.6, 329.6, 392.0)],
-    "uplifting": [(261.6, 329.6, 392.0), (293.7, 370.0, 440.0)],
+_C, _G, _AM, _F = (261.6, 329.6, 392.0), (196.0, 246.9, 293.7), (220.0, 261.6, 329.6), (174.6, 220.0, 261.6)
+_DM, _E, _EM, _D = (146.8, 174.6, 220.0), (164.8, 207.7, 246.9), (164.8, 196.0, 246.9), (146.8, 185.0, 220.0)
+CHORDS = {  # 4-chord progression per mood (original synthesized music, no copyright)
+    "warm":      [_C, _G, _AM, _F],
+    "sad":       [_AM, _F, _C, _G],
+    "tense":     [_AM, _F, _DM, _E],
+    "curious":   [_F, _G, _EM, _AM],
+    "uplifting": [_G, _D, _EM, _C],
 }
 
 
@@ -575,13 +582,17 @@ def make_music(mood: str, seconds: float, dest: Path) -> str:
            "-c:a", "aac", "-b:a", "192k", str(dest))
         return track.name
     chords = CHORDS.get(mood, CHORDS["warm"])
-    half = 4.0
+    bar, step = 4.0, 0.5  # 4 s per chord; arpeggio note every 0.5 s
+    cycle = bar * len(chords)
     tones = []
-    for f1, f2 in zip(*chords):
-        for f, lo in ((f1, 0), (f2, half)):
-            gate = f"between(mod(t,{half * 2}),{lo},{lo + half})"
-            tones.append(f"0.09*sin(2*PI*{f / 2:.2f}*t)*{gate}")
-            tones.append(f"0.04*sin(2*PI*{f:.2f}*t+0.3*sin(2*PI*0.2*t))*{gate}")
+    for k, chord in enumerate(chords):
+        gate = f"between(mod(t,{cycle}),{k * bar},{(k + 1) * bar - 0.001})"
+        for n, f in enumerate(chord):
+            tones.append(f"0.07*sin(2*PI*{f / 2:.2f}*t)*{gate}")  # warm pad, an octave down
+            tones.append(f"0.03*sin(2*PI*{f:.2f}*t+0.3*sin(2*PI*0.2*t))*{gate}")
+            # soft plucked arpeggio an octave up, cycling through the chord tones
+            tones.append(f"0.035*sin(2*PI*{f * 2:.2f}*t)*exp(-5*mod(t,{step}))"
+                         f"*eq(mod(floor(t/{step}),3),{n})*{gate}")
     af = (f"lowpass=f=1800,aecho=0.8:0.85:500|900:0.35|0.25,"
           f"tremolo=f=0.25:d=0.3,afade=t=in:d=2,afade=t=out:st={fade_out:.2f}:d=2.5,volume=1.6")
     ff("-f", "lavfi", "-t", f"{seconds:.2f}", "-i", f"aevalsrc='{'+'.join(tones)}':s=44100:c=stereo",
@@ -703,7 +714,7 @@ def build_metadata(sb: dict, report: dict) -> dict:
     hashtags = [("#" + re.sub(r"[^\w]", "", h.lstrip("#"))) for h in sb.get("hashtags", []) if h.strip()]
     hashtags = list(dict.fromkeys(hashtags + [CHANNEL_TAG, "#ShortFilm" if FILM else "#Shorts"]))[:6]
     tags, total = [], 0
-    for t in [clean_tag(x) for x in sb.get("tags", [])] + ["silent stories", "no words story", "short film"]:
+    for t in [clean_tag(x) for x in sb.get("tags", [])] + [CHANNEL_NAME, "silent stories", "no words story", "short film"]:
         if t and t.lower() not in (x.lower() for x in tags) and total + len(t) + 3 < 480:
             tags.append(t)
             total += len(t) + 3
@@ -775,9 +786,17 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
     req = yt.videos().insert(
         part="snippet,status", body=body,
         media_body=MediaFileUpload(str(video), mimetype="video/mp4", chunksize=-1, resumable=True))
-    resp = None
+    resp, retries = None, 0
     while resp is None:
-        _, resp = req.next_chunk()
+        try:
+            _, resp = req.next_chunk()
+        except (HttpError, OSError) as e:
+            status = getattr(e, "status_code", None) or getattr(getattr(e, "resp", None), "status", None)
+            if retries >= 5 or (status is not None and int(status) < 500):
+                raise
+            retries += 1
+            print(f"  upload hiccup ({e}); retry {retries}/5")
+            time.sleep(2 ** retries)
     vid = resp["id"]
     link = f"https://youtu.be/{vid}" if FILM else f"https://youtube.com/shorts/{vid}"
     print(f"Uploaded as {resp['status']['privacyStatus']}: {link}")
@@ -795,7 +814,7 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
 def main() -> int:
     item = next_story()
     if not item:
-        print("stories.txt is empty - add more ideas.")
+        print(f"{STORIES.name} is empty - add more ideas.")
         return 0
     genre, idea = item
     print(f"[{genre}] {idea}")
