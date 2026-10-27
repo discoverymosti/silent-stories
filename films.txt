@@ -2,7 +2,6 @@
 # Worldwide audience: universal emotions, any country. Give each film a character with a goal,
 # an obstacle, a turning point and an emotional payoff. The top line is made next.
 
-story | The Kite Maker: an old kite maker teaches a lonely boy to fly his last handmade kite, and years later the grown boy returns to fly it over the old man's empty shop
 story | The Umbrella: a street vendor lends her only umbrella to a stranger in a storm; a week later, on the worst day of her life, it comes back to her in an unexpected way
 story | Letters to Nobody: a retired postman keeps delivering handwritten letters to a widow who stopped receiving mail, until she discovers who has been writing them
 story | The Last Train Home: a worker saves coins all year for a train ticket home for the holidays, loses his wallet on the platform, and a crowd of strangers quietly changes his night
