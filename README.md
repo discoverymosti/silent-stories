@@ -6,7 +6,7 @@ Automated YouTube Shorts channel. **No voice, no language barrier**: stories tol
 stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI images per scene (Gemini → Cloudflare FLUX → Pollinations,
                                                stock footage fallback)
            ─► auto-edit: Ken Burns moves, crossfades, film look, captions, original music
-           ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (2 a day: 01:40 and 14:40 UTC)
+           ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (2 a day Mon-Sat at 01:40 and 14:40 UTC, 1 on Sunday)
 ```
 
 ## One-time setup (≈25 min)
@@ -43,7 +43,7 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 - Happy? Repo → Settings → Variables → add `YT_PRIVACY` = `public`. From then on it posts daily on its own.
 
 ## Weekly short film
-Every **Sunday 16:10 UTC** (12:10 New York, 17:10 Paris, 21:40 India) the same workflow makes a **~3 minute widescreen (16:9) silent short film**: 26-34 AI scenes in three acts, captions, original score, watermark and thumbnail. It uploads as a normal video (not a Short), from the queue in `films.txt`.
+Every **Sunday 16:10 UTC** (12:10 New York, 17:10 Paris, 21:40 India) the same workflow makes a **~3 minute widescreen (16:9) silent short film**: 18-24 AI scenes in three acts, captions, original score, watermark and thumbnail. It uploads as a normal video (not a Short), from the queue in `films.txt`.
 Run one now: **Actions → Silent Stories - Publish Short → Run workflow → format: film**.
 
 ### How films stay consistent (film-crew workflow)
@@ -83,12 +83,12 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 |---|---|---|---|---|
 | GitHub Actions | rendering + uploading | unlimited minutes on a **public** repo | ~20 min/day + ~40 min/week | free |
 | Gemini API (AI Studio, free tier) | storyboard, SEO title/description/tags | free-tier daily request limits | 1 request/video | free |
-| Cloudflare Workers AI (FLUX) | AI images | 10,000 neurons/day | ~12 images/Short x2, ~32/film: under the limit | free |
+| Cloudflare Workers AI (FLUX) | AI images | 10,000 neurons/day (resets 00:00 UTC) | ~12 images/Short, ~22/film; Sunday has one Short + the film so the day stays inside the allowance | free |
 | YouTube Data API | upload + thumbnail | 10,000 quota units/day | ~1,650 units/video | free |
 | Google Cloud project (OAuth) | sign-in for uploads | free, no billing account needed | n/a | free |
 | Music | original synthesized score | n/a | n/a | free |
 
-**What would cost money (only if you turn it on):** enabling billing on the Gemini API key (Gemini images, about $0.04/image ≈ $15-20/month for daily Shorts), Cloudflare Workers Paid ($5/month, only if you exceed 10k neurons/day), making the repo **private** (GitHub Free includes 2,000 Actions minutes/month, enough for this; beyond that ~$0.008/min), or `ANTHROPIC_API_KEY` instead of Gemini (~₹1-2/video). Never add a payment method you don't intend to use.
+**What would cost money (only if you turn it on):** enabling billing on the Gemini API key (Gemini images, about $0.04/image ≈ $15-20/month for daily Shorts), Cloudflare Workers Paid ($5/month, only if you want more than ~10k neurons/day, e.g. more videos per day), making the repo **private** (GitHub Free includes 2,000 Actions minutes/month, enough for this; beyond that ~$0.008/min), or `ANTHROPIC_API_KEY` instead of Gemini (~₹1-2/video). Never add a payment method you don't intend to use.
 
 ## Good to know
 - **Unverified API project:** YouTube may lock API uploads to *private* until your Google Cloud project passes the [YouTube API audit](https://support.google.com/youtube/contact/yt_api_form). Until then, flip each video to public in YouTube Studio (one click), or submit the audit form.

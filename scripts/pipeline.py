@@ -189,7 +189,7 @@ Return ONLY valid JSON with exactly these keys:
 
 
 FILM_RULES = """STORY RULES (weekly widescreen SHORT FILM, not a Short)
-- 26 to 34 scenes, total 150-200 seconds, each scene 4-8 seconds.
+- 18 to 24 scenes, total 150-190 seconds, each scene 6-10 seconds (let shots breathe).
 - Three acts: setup (who, where, what they want) -> conflict / obstacle -> turning point
   -> emotional resolution. Give the main character a clear goal and a visible change.
 - Scene 1-2 are the HOOK: a striking image + a caption that creates a question.
@@ -304,7 +304,7 @@ def storyboard(genre: str, idea: str) -> dict:
         raise SystemExit("Set GEMINI_API_KEY or ANTHROPIC_API_KEY.")
     sb = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
     for s in sb["scenes"]:
-        s["seconds"] = max(3.0, min(9.0 if FILM else 7.0, float(s.get("seconds", 4.5))))
+        s["seconds"] = max(3.0, min(10.0 if FILM else 7.0, float(s.get("seconds", 4.5))))
         s.setdefault("camera", "zoom_in")
         s.setdefault("query", s.get("image_prompt", "")[:40])
         s.setdefault("caption", "")
@@ -400,7 +400,7 @@ def gen_image_cloudflare(prompt: str, dest: Path, seed: int) -> bool:
             f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/@cf/black-forest-labs/flux-1-schnell",
             headers={"Authorization": f"Bearer {token}"},
             json={"prompt": f"{prompt} Centered composition, subject in the middle third."[:2048],
-                  "steps": 8},
+                  "steps": 4},  # schnell's native step count; cost scales with steps
             timeout=120,
         )
     except requests.RequestException as e:
@@ -947,7 +947,8 @@ def main() -> int:
 
     if report["fallback"] > MAX_FALLBACK:
         print(f"WARNING: {report['fallback']} of {len(sb['scenes'])} scenes have no real visuals "
-              f"(limit {MAX_FALLBACK}). Add CF_ACCOUNT_ID/CF_API_TOKEN or PIXABAY_API_KEY secrets.")
+              f"(limit {MAX_FALLBACK}). Usually the free AI image allowance is used up for today "
+              f"(Cloudflare resets 00:00 UTC) or CF_ACCOUNT_ID/CF_API_TOKEN are missing.")
         if not SKIP_UPLOAD:
             print("Not uploading: low-effort videos risk YouTube's reused/repetitive content policy. "
                   "The story stays at the top of the queue.")
