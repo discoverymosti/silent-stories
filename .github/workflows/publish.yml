@@ -2,13 +2,19 @@ name: Silent Stories - Publish Short
 
 on:
   schedule:
-    - cron: "30 12 * * *"   # every day 18:00 IST (prime time for Shorts in India)
+    - cron: "30 12 * * *"   # every day 18:00 IST: vertical Short (prime time for Shorts in India)
+    - cron: "40 13 * * 0"   # every Sunday 19:10 IST: weekly widescreen short film
   workflow_dispatch:
     inputs:
       skip_upload:
         description: "Preview only (render, don't upload)"
         type: boolean
         default: true
+      format:
+        description: "short = daily vertical Short, film = weekly ~3 min short film"
+        type: choice
+        options: [short, film]
+        default: short
 
 permissions:
   contents: write
@@ -20,7 +26,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
 
@@ -81,6 +87,8 @@ jobs:
           YT_PRIVACY: ${{ vars.YT_PRIVACY || 'private' }}
           CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'DiscoveryMosti' }}
           CHANNEL_HASHTAG: ${{ vars.CHANNEL_HASHTAG || '#DiscoveryMosti' }}
+          VIDEO_FORMAT: ${{ (github.event.schedule == '40 13 * * 0' && 'film') || inputs.format || 'short' }}
+          WATERMARK: ${{ vars.WATERMARK || 'DiscoveryMosti' }}
           SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_upload || 'false' }}
         run: python scripts/pipeline.py
 
@@ -102,6 +110,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add stories.txt done.txt
+          git add stories.txt films.txt done.txt
           git diff --cached --quiet || git commit -m "chore: published next story [skip ci]"
           git push

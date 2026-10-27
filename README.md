@@ -42,6 +42,13 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 - Run once with *Preview only* unticked. The Short uploads as **private**. Check it in YouTube Studio.
 - Happy? Repo → Settings → Variables → add `YT_PRIVACY` = `public`. From then on it posts daily on its own.
 
+## Weekly short film
+Every **Sunday 19:10 IST** the same workflow makes a **~3 minute widescreen (16:9) silent short film**: 26-34 AI scenes in three acts, captions, original score, watermark and thumbnail. It uploads as a normal video (not a Short), from the queue in `films.txt`.
+Run one now: **Actions → Silent Stories - Publish Short → Run workflow → format: film**.
+
+## Watermark
+Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on Shorts, clear of the Shorts buttons; bottom-right on films). Change it with the `WATERMARK` variable (empty = none). For YouTube's clickable *subscribe* watermark, also upload your logo in YouTube Studio → Customisation → Branding → Video watermark.
+
 ## Daily use
 - **Add ideas** to `stories.txt` (`genre | idea`), editing it on github.com works fine. Each upload removes the top line and logs the link in `done.txt`.
 - **Better music:** drop royalty-free mp3s in `music/` (see `music/README.md`). Without them, a generated ambient pad is used.
@@ -56,7 +63,8 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 | `VISUAL_MODE` | `ai` (original AI images) or `stock` (Pixabay/Pexels) |
 | `CHANNEL_NAME` | `DiscoveryMosti` (shown on end card) |
 | `CHANNEL_HASHTAG` | `#DiscoveryMosti` |
-| `MAX_FALLBACK_SCENES` | `2`: skip the upload if more scenes than this end up as plain gradient filler |
+| `WATERMARK` | `DiscoveryMosti` |
+| `MAX_FALLBACK_SCENES` | `2` for Shorts, `4` for films: skip the upload if more scenes than this end up as plain gradient filler |
 
 ## Copyright-safe by design
 - Visuals: original AI images (Gemini / Cloudflare FLUX / Pollinations), no stock or third-party clips unless AI fails.

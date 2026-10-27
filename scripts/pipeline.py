@@ -1,5 +1,6 @@
 """
-Silent Stories -> YouTube Shorts pipeline (fully automatic, copyright-safe).
+Silent Stories -> YouTube pipeline (fully automatic, copyright-safe):
+daily vertical Shorts, plus a weekly widescreen short film with VIDEO_FORMAT=film.
 
 No voiceover. Original AI visuals + animated captions + original music, so it works
 in every language and contains no third-party copyrighted material.
@@ -30,12 +31,16 @@ from urllib.parse import quote
 import requests
 
 ROOT = Path(__file__).resolve().parent.parent
-STORIES = ROOT / "stories.txt"
+# VIDEO_FORMAT=short: daily vertical Short (~50 s) from stories.txt
+# VIDEO_FORMAT=film:  weekly widescreen short film (~3 min) from films.txt
+FORMAT = os.getenv("VIDEO_FORMAT", "short").lower()
+FILM = FORMAT == "film"
+STORIES = ROOT / ("films.txt" if FILM else "stories.txt")
 DONE = ROOT / "done.txt"
 MUSIC_DIR = ROOT / "music"
 OUT = ROOT / "out"
 
-W, H, FPS = 1080, 1920, 30
+W, H, FPS = (1920, 1080, 30) if FILM else (1080, 1920, 30)
 XF = 0.5  # crossfade seconds
 FONT = os.getenv("CAPTION_FONT", "Noto Sans")
 FONTS_DIR = os.getenv("FONTS_DIR", "")  # extra fonts folder (static ffmpeg can't rely on system fontconfig)
@@ -48,7 +53,8 @@ SKIP_UPLOAD = os.getenv("SKIP_UPLOAD", "false").lower() == "true"
 CHANNEL_TAG = os.getenv("CHANNEL_HASHTAG", "#DiscoveryMosti")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME", "DiscoveryMosti")
 # refuse to upload if more than this many scenes ended up as plain gradient filler
-MAX_FALLBACK = int(os.getenv("MAX_FALLBACK_SCENES", "2"))
+MAX_FALLBACK = int(os.getenv("MAX_FALLBACK_SCENES", "4" if FILM else "2"))
+WATERMARK = os.getenv("WATERMARK", CHANNEL_NAME)
 
 NO_TEXT = ("No text, no letters, no captions, no logos, no watermark, no brand names, "
            "no real celebrities, no copyrighted characters.")
@@ -72,12 +78,13 @@ def mark_done(idea: str, video_id: str | None) -> None:
     kept = [l for l in STORIES.read_text(encoding="utf-8").splitlines() if idea not in l]
     STORIES.write_text("\n".join(kept).rstrip() + "\n", encoding="utf-8")
     with DONE.open("a", encoding="utf-8") as f:
-        f.write(f"{idea} | {('https://youtube.com/shorts/' + video_id) if video_id else 'not uploaded'}\n")
+        base = "https://youtu.be/" if FILM else "https://youtube.com/shorts/"
+        f.write(f"{idea} | {(base + video_id) if video_id else 'not uploaded'}\n")
 
 
 # ================================================================ storyboard + SEO
 
-STORYBOARD_PROMPT = """You are the director and growth marketer of "Silent Stories", a YouTube
+STORYBOARD_PROMPT = """You are the director and growth marketer of "{channel}", a YouTube
 Shorts channel. Videos have NO voiceover and NO dialogue: they tell a story only through
 cinematic images, very short on-screen captions and music, so anyone in any country can follow.
 
@@ -124,6 +131,17 @@ Return ONLY valid JSON with exactly these keys:
   "scenes": [{{"image_prompt": str, "camera": str, "query": str,
                "caption": str, "seconds": number}}]}}"""
 
+
+FILM_RULES = """STORY RULES (weekly widescreen SHORT FILM, not a Short)
+- 26 to 34 scenes, total 150-200 seconds, each scene 4-8 seconds.
+- Three acts: setup (who, where, what they want) -> conflict / obstacle -> turning point
+  -> emotional resolution. Give the main character a clear goal and a visible change.
+- Scene 1-2 are the HOOK: a striking image + a caption that creates a question.
+- Captions: max 8 simple words, present tense, no emojis. About a third of scenes have ""
+  (silent beats) so the images breathe.
+- "ending": shareable closing line, max 10 words.
+- "music_mood": one of warm, sad, tense, curious, uplifting.
+"""
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 _model_cache: dict[str, str | None] = {}
@@ -217,7 +235,11 @@ def ask_claude(prompt: str) -> str:
 
 
 def storyboard(genre: str, idea: str) -> dict:
-    prompt = STORYBOARD_PROMPT.format(genre=genre, idea=idea)
+    prompt = STORYBOARD_PROMPT.format(genre=genre, idea=idea, channel=CHANNEL_NAME)
+    if FILM:
+        start, end = prompt.index("STORY RULES"), prompt.index("VISUAL RULES")
+        prompt = (prompt[:start] + FILM_RULES + "\n" + prompt[end:]).replace(
+            "YouTube\nShorts channel", "YouTube\nchannel").replace("vertical image", "widescreen 16:9 image")
     if os.getenv("GEMINI_API_KEY"):
         text = ask_gemini(prompt)
     elif os.getenv("ANTHROPIC_API_KEY"):
@@ -226,7 +248,7 @@ def storyboard(genre: str, idea: str) -> dict:
         raise SystemExit("Set GEMINI_API_KEY or ANTHROPIC_API_KEY.")
     sb = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
     for s in sb["scenes"]:
-        s["seconds"] = max(3.0, min(7.0, float(s.get("seconds", 4.5))))
+        s["seconds"] = max(3.0, min(9.0 if FILM else 7.0, float(s.get("seconds", 4.5))))
         s.setdefault("camera", "zoom_in")
         s.setdefault("query", s.get("image_prompt", "")[:40])
         s.setdefault("caption", "")
@@ -244,7 +266,7 @@ _gemini_img_ok = True
 
 def full_prompt(sb: dict, shot: str) -> str:
     chars = f" Characters: {sb['characters']}." if sb.get("characters") else ""
-    return f"{shot}.{chars} Style: {sb['style']}. Vertical 9:16 photo. {NO_TEXT}"
+    return f"{shot}.{chars} Style: {sb['style']}. {'Widescreen 16:9' if FILM else 'Vertical 9:16'} photo. {NO_TEXT}"
 
 
 def gen_image_gemini(prompt: str, dest: Path) -> bool:
@@ -261,7 +283,7 @@ def gen_image_gemini(prompt: str, dest: Path) -> bool:
             headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
             json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
                   "generationConfig": {"responseModalities": ["IMAGE"],
-                                       "imageConfig": {"aspectRatio": "9:16"}}},
+                                       "imageConfig": {"aspectRatio": "16:9" if FILM else "9:16"}}},
             timeout=180,
         )
     except requests.RequestException as e:
@@ -512,9 +534,9 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Cap,{FONT},78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,5,3,2,90,90,520,1
+Style: Cap,{FONT},{64 if FILM else 78},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,5,3,2,90,90,{90 if FILM else 520},1
 Style: End,{FONT},92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,0,0,5,110,110,0,1
-Style: Tag,{FONT},44,&H00B4B4B4,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4,0,1,0,0,2,90,90,300,1
+Style: Tag,{FONT},44,&H00B4B4B4,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4,0,1,0,0,2,90,90,{220 if FILM else 300},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -567,16 +589,25 @@ def make_music(mood: str, seconds: float, dest: Path) -> str:
     return "original synthesized score"
 
 
+def watermark_filter() -> str:
+    """Semi-transparent channel name. Shorts: top-left, clear of the Shorts UI; films: bottom-right."""
+    if not WATERMARK:
+        return ""
+    pos = "x=w-tw-44:y=h-th-36" if FILM else "x=48:y=90"
+    return (f",drawtext=fontfile='{font_file(True)}':text='{drawtext_escape(WATERMARK)}':"
+            f"fontsize={40 if FILM else 46}:fontcolor=white@0.62:borderw=2:bordercolor=black@0.45:{pos}")
+
+
 def drawtext_escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace(":", "\\:").replace("'", "’").replace("%", "\\%")
 
 
 def make_thumbnail(sb: dict, src: Path | None, dest: Path) -> None:
-    """1080x1920 JPEG: AI image + big punchy text with dark gradient for readability."""
+    """Frame-sized JPEG (1080x1920 Short / 1920x1080 film): AI image + big punchy text with dark gradient for readability."""
     text = (sb.get("thumbnail_text") or sb["title"]).upper()
     words, lines, cur = text.split(), [], ""
     for w in words:  # wrap ~12 chars per line
-        if len(cur) + len(w) + 1 > 12 and cur:
+        if len(cur) + len(w) + 1 > (18 if FILM else 12) and cur:
             lines.append(cur)
             cur = w
         else:
@@ -644,7 +675,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
 
     final = work / "short.mp4"
-    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}" + (f":fontsdir={FONTS_DIR}" if FONTS_DIR else ""), *ENC,
+    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}" + (f":fontsdir={FONTS_DIR}" if FONTS_DIR else "") + watermark_filter(), *ENC,
        "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(final))
 
     thumb_img = work / "thumb_src.png"
@@ -670,7 +701,7 @@ def clean_tag(t: str) -> str:
 
 def build_metadata(sb: dict, report: dict) -> dict:
     hashtags = [("#" + re.sub(r"[^\w]", "", h.lstrip("#"))) for h in sb.get("hashtags", []) if h.strip()]
-    hashtags = list(dict.fromkeys(hashtags + [CHANNEL_TAG, "#Shorts"]))[:6]
+    hashtags = list(dict.fromkeys(hashtags + [CHANNEL_TAG, "#ShortFilm" if FILM else "#Shorts"]))[:6]
     tags, total = [], 0
     for t in [clean_tag(x) for x in sb.get("tags", [])] + ["silent stories", "no words story", "short film"]:
         if t and t.lower() not in (x.lower() for x in tags) and total + len(t) + 3 < 480:
@@ -748,7 +779,8 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
     while resp is None:
         _, resp = req.next_chunk()
     vid = resp["id"]
-    print(f"Uploaded as {resp['status']['privacyStatus']}: https://youtube.com/shorts/{vid}")
+    link = f"https://youtu.be/{vid}" if FILM else f"https://youtube.com/shorts/{vid}"
+    print(f"Uploaded as {resp['status']['privacyStatus']}: {link}")
     try:
         yt.thumbnails().set(videoId=vid, media_body=MediaFileUpload(str(thumb), mimetype="image/jpeg")).execute()
         print("Thumbnail set.")
