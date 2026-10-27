@@ -30,7 +30,18 @@ jobs:
           cache: pip
 
       - name: Install ffmpeg + fonts
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-noto-core
+        timeout-minutes: 10
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          APT="sudo -E apt-get -o DPkg::Lock::Timeout=120 -o Acquire::Retries=3 -y -qq --no-install-recommends"
+          for i in 1 2 3; do
+            timeout 240 sudo -E apt-get -o Acquire::Retries=3 update -qq && \
+            timeout 300 $APT install ffmpeg fonts-noto-core fonts-dejavu-core && break
+            echo "apt attempt $i failed, retrying"; sleep 10
+          done
+          ffmpeg -hide_banner -filters | grep -q " ass " && echo "ffmpeg ready"
 
       - name: Install Python deps
         run: pip install -r requirements.txt
