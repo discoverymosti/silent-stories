@@ -112,6 +112,8 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 | Meta Graph API | Instagram Reels + Facebook Page | free (rate limits: 50 IG posts/day) | 1-2 posts/day | free |
 | X API (Free tier) | posts with the YouTube link | free write tier (check developer.x.com for the current monthly post cap) | ~2 posts/day | free |
 
+**Free-only mode is ON by default** (`FREE_ONLY` variable, default `true`): the pipeline never calls Gemini image generation or the Claude API, the only two paths here that can bill. Cloudflare's free plan simply stops for the day at its limit (the video waits for tomorrow, nothing is charged), and GitHub, YouTube and Google sign-in are free. Keep it this way for a guaranteed ₹0.
+
 **What would cost money (only if you turn it on):** enabling billing on the Gemini API key (Gemini images, about $0.04/image ≈ $15-20/month for daily Shorts), Cloudflare Workers Paid ($5/month, only if you want more than ~10k neurons/day, e.g. more videos per day), making the repo **private** (GitHub Free includes 2,000 Actions minutes/month, enough for this; beyond that ~$0.008/min), or `ANTHROPIC_API_KEY` instead of Gemini (~₹1-2/video). Never add a payment method you don't intend to use.
 
 ## Good to know
