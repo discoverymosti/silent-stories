@@ -327,7 +327,7 @@ def ask_openai_compatible(name: str, url: str, key: str, models: list[str], prom
             text = r.json()["choices"][0]["message"]["content"]
             json.loads(_strip_fences(text))
         except (KeyError, IndexError, TypeError, ValueError) as e:
-            print(f"  {name}/{model} bad response: {e}")
+            print(f"  {name}/{model} bad response: {e} | {r.headers.get('content-type')} | {r.text[:300]!r}")
             continue
         print(f"  answer by {name}/{model}")
         return text
