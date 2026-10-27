@@ -680,12 +680,25 @@ def build_metadata(sb: dict, report: dict) -> dict:
 
 # ================================================================ upload
 
+def refresh_token() -> str:
+    """YT_REFRESH_TOKEN secret, else the token saved by the Connect YouTube workflow."""
+    if os.getenv("YT_REFRESH_TOKEN"):
+        return os.environ["YT_REFRESH_TOKEN"]
+    enc = ROOT / "yt_token.enc"
+    if not enc.exists():
+        sys.exit("YouTube not connected: run the 'Connect YouTube channel' workflow "
+                 "or set the YT_REFRESH_TOKEN secret.")
+    return subprocess.run(["openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-a",
+                           "-pass", "env:YT_CLIENT_SECRET"], input=enc.read_bytes(),
+                          capture_output=True, check=True).stdout.decode().strip()
+
+
 def youtube_client():
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
     creds = Credentials(
         token=None,
-        refresh_token=os.environ["YT_REFRESH_TOKEN"],
+        refresh_token=refresh_token(),
         client_id=os.environ["YT_CLIENT_ID"],
         client_secret=os.environ["YT_CLIENT_SECRET"],
         token_uri="https://oauth2.googleapis.com/token",

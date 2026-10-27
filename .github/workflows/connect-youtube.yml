@@ -1,0 +1,41 @@
+name: Connect YouTube channel
+
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "Leave empty to get the sign-in link. Then paste the full 'localhost' address here."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  connect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Connect
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          AUTH_CODE: ${{ inputs.code }}
+        run: |
+          pip install -q requests
+          python scripts/connect_ci.py
+
+      - name: Save encrypted token
+        if: inputs.code != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add yt_token.enc
+          git diff --cached --quiet || git commit -m "chore: connect YouTube channel [skip ci]"
+          git push
