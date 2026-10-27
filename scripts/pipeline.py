@@ -45,8 +45,8 @@ GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "")  # empty = auto-pick ne
 VISUAL_MODE = os.getenv("VISUAL_MODE", "ai").lower()  # ai | stock
 PRIVACY = os.getenv("YT_PRIVACY", "private")
 SKIP_UPLOAD = os.getenv("SKIP_UPLOAD", "false").lower() == "true"
-CHANNEL_TAG = os.getenv("CHANNEL_HASHTAG", "#SilentStories")
-CHANNEL_NAME = os.getenv("CHANNEL_NAME", "Silent Stories")
+CHANNEL_TAG = os.getenv("CHANNEL_HASHTAG", "#DiscoveryMosti")
+CHANNEL_NAME = os.getenv("CHANNEL_NAME", "DiscoveryMosti")
 # refuse to upload if more than this many scenes ended up as plain gradient filler
 MAX_FALLBACK = int(os.getenv("MAX_FALLBACK_SCENES", "2"))
 

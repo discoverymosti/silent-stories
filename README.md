@@ -54,8 +54,8 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 | `GEMINI_MODEL` | auto (newest Gemini Flash) |
 | `GEMINI_IMAGE_MODEL` | auto (newest Gemini image model) |
 | `VISUAL_MODE` | `ai` (original AI images) or `stock` (Pixabay/Pexels) |
-| `CHANNEL_NAME` | `Silent Stories` (shown on end card) |
-| `CHANNEL_HASHTAG` | `#SilentStories` |
+| `CHANNEL_NAME` | `DiscoveryMosti` (shown on end card) |
+| `CHANNEL_HASHTAG` | `#DiscoveryMosti` |
 | `MAX_FALLBACK_SCENES` | `2`: skip the upload if more scenes than this end up as plain gradient filler |
 
 ## Copyright-safe by design

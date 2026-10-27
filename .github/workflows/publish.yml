@@ -79,8 +79,8 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           YT_PRIVACY: ${{ vars.YT_PRIVACY || 'private' }}
-          CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Silent Stories' }}
-          CHANNEL_HASHTAG: ${{ vars.CHANNEL_HASHTAG || '#SilentStories' }}
+          CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'DiscoveryMosti' }}
+          CHANNEL_HASHTAG: ${{ vars.CHANNEL_HASHTAG || '#DiscoveryMosti' }}
           SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_upload || 'false' }}
         run: python scripts/pipeline.py
 
