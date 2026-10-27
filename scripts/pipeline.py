@@ -132,9 +132,9 @@ def _version_key(name: str) -> tuple:
     return (stable, nums[0], -len(name))
 
 
-def pick_gemini_model(kind: str) -> str | None:
-    """Auto-discover the newest usable Gemini model ('text' or 'image') for this API key,
-    so the pipeline keeps working when Google retires old model names."""
+def gemini_candidates(kind: str) -> list[str]:
+    """Ranked list of usable Gemini models ('text' or 'image') for this API key, newest
+    stable first, so the pipeline survives model retirements and busy models."""
     if kind in _model_cache:
         return _model_cache[kind]
     wanted = GEMINI_MODEL if kind == "text" else GEMINI_IMAGE_MODEL
@@ -142,41 +142,68 @@ def pick_gemini_model(kind: str) -> str | None:
         r = requests.get(f"{GEMINI_BASE}/models", params={"pageSize": 1000},
                          headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, timeout=60)
         r.raise_for_status()
-        models = [m for m in r.json().get("models", [])
-                  if "generateContent" in m.get("supportedGenerationMethods", [])]
+        names = [m["name"].split("/")[-1] for m in r.json().get("models", [])
+                 if "generateContent" in m.get("supportedGenerationMethods", [])]
     except requests.RequestException as e:
-        print(f"  could not list Gemini models ({e}); using {wanted}")
-        _model_cache[kind] = wanted
-        return wanted
-    names = [m["name"].split("/")[-1] for m in models]
-    if wanted in names:
-        choice = wanted
+        print(f"  could not list Gemini models ({e})")
+        names = []
+    if kind == "text":
+        pool = [n for n in names if re.search(r"flash|pro", n)
+                and not re.search(r"image|tts|audio|live|embed|thinking|computer|robotics", n)]
+        # prefer flash, then flash-lite, then pro; newest stable first within each
+        rank = lambda n: (0 if "flash" in n and "lite" not in n else 1 if "lite" in n else 2,)
+        pool.sort(key=lambda n: (rank(n), tuple(-x if isinstance(x, (int, float)) else x for x in _version_key(n))))
     else:
-        if kind == "text":
-            pool = [n for n in names if "flash" in n and not re.search(r"image|tts|audio|live|lite|embed|thinking", n)]
-        else:
-            pool = [n for n in names if "image" in n and "gemini" in n]
-        choice = max(pool, key=_version_key) if pool else None
-    print(f"  Gemini {kind} model: {choice}")
-    _model_cache[kind] = choice
-    return choice
+        pool = sorted([n for n in names if "image" in n and "gemini" in n], key=_version_key, reverse=True)
+    if wanted:
+        pool = [wanted] + [n for n in pool if n != wanted]
+    pool = pool[:5]
+    print(f"  Gemini {kind} models: {pool}")
+    _model_cache[kind] = pool
+    return pool
+
+
+def pick_gemini_model(kind: str) -> str | None:
+    c = gemini_candidates(kind)
+    return c[0] if c else None
 
 
 def ask_gemini(prompt: str) -> str:
-    model = pick_gemini_model("text")
-    if not model:
+    models = gemini_candidates("text")
+    if not models:
         raise SystemExit("No Gemini text model available for this API key.")
-    r = requests.post(
-        f"{GEMINI_BASE}/models/{model}:generateContent",
-        headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
-        json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
-              "generationConfig": {"responseMimeType": "application/json", "temperature": 0.9}},
-        timeout=180,
-    )
-    if r.status_code != 200:
-        raise SystemExit(f"Gemini error {r.status_code}: {r.text[:500]}")
-    parts = r.json()["candidates"][0]["content"]["parts"]
-    return "".join(p.get("text", "") for p in parts)
+    last = ""
+    for model in models:
+        for attempt in range(4):
+            try:
+                r = requests.post(
+                    f"{GEMINI_BASE}/models/{model}:generateContent",
+                    headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
+                    json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                          "generationConfig": {"responseMimeType": "application/json", "temperature": 0.9}},
+                    timeout=180,
+                )
+            except requests.RequestException as e:
+                last = str(e)
+                time.sleep(10 * (attempt + 1))
+                continue
+            if r.status_code == 200:
+                try:
+                    parts = r.json()["candidates"][0]["content"]["parts"]
+                    text = "".join(p.get("text", "") for p in parts)
+                    json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
+                    print(f"  storyboard by {model}")
+                    return text
+                except (KeyError, IndexError, ValueError) as e:
+                    last = f"bad response: {e}"
+                    continue
+            last = f"{r.status_code}: {r.text[:300]}"
+            print(f"  {model} -> {r.status_code}, attempt {attempt + 1}")
+            if r.status_code in (429, 500, 502, 503, 504):
+                time.sleep(15 * (attempt + 1))
+                continue
+            break  # 400/403/404: try next model
+    raise SystemExit(f"Gemini failed on all models. Last error {last}")
 
 
 def ask_claude(prompt: str) -> str:
