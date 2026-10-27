@@ -4,7 +4,7 @@ Silent Stories -> YouTube Shorts pipeline.
 No voiceover. Visuals + animated captions + music only, so it works in every language.
 
 1. Take the next idea from stories.txt
-2. Claude writes a storyboard (scenes, captions, music mood, title, tags)
+2. Gemini (or Claude) writes a storyboard (scenes, captions, music mood, title, tags)
 3. Pexels supplies vertical stock footage for each scene
 4. ffmpeg builds a 1080x1920 video with fades, captions and an ambient soundtrack
 5. YouTube Data API uploads it as a Short
@@ -86,16 +86,41 @@ Return ONLY valid JSON:
   "scenes": [{{"query": str, "caption": str, "seconds": number}}]}}"""
 
 
-def storyboard(genre: str, idea: str) -> dict:
-    import anthropic
-    client = anthropic.Anthropic()
-    msg = client.messages.create(
-        model=MODEL,
-        max_tokens=2500,
-        messages=[{"role": "user", "content": STORYBOARD_PROMPT.format(genre=genre, idea=idea)}],
+def ask_gemini(prompt: str) -> str:
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    r = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
+        json={
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.9},
+        },
+        timeout=120,
     )
-    text = msg.content[0].text.strip()
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+    if r.status_code != 200:
+        raise SystemExit(f"Gemini error {r.status_code}: {r.text[:500]}")
+    parts = r.json()["candidates"][0]["content"]["parts"]
+    return "".join(p.get("text", "") for p in parts)
+
+
+def ask_claude(prompt: str) -> str:
+    import anthropic
+    msg = anthropic.Anthropic().messages.create(
+        model=MODEL, max_tokens=2500,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text
+
+
+def storyboard(genre: str, idea: str) -> dict:
+    prompt = STORYBOARD_PROMPT.format(genre=genre, idea=idea)
+    if os.getenv("GEMINI_API_KEY"):
+        text = ask_gemini(prompt)
+    elif os.getenv("ANTHROPIC_API_KEY"):
+        text = ask_claude(prompt)
+    else:
+        raise SystemExit("Set GEMINI_API_KEY or ANTHROPIC_API_KEY.")
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
     sb = json.loads(text)
     for s in sb["scenes"]:
         s["seconds"] = max(2.5, min(7.0, float(s["seconds"])))

@@ -3,7 +3,7 @@
 Automated YouTube Shorts channel. **No voice, no language barrier**: stories told with footage, short captions and music, so they work worldwide.
 
 ```
-stories.txt ─► Claude storyboard ─► Pexels vertical footage ─► ffmpeg 1080×1920
+stories.txt ─► Gemini storyboard ─► Pexels vertical footage ─► ffmpeg 1080×1920
            (scenes, captions, mood)                         (fades, animated captions,
                                                              ambient music, end card)
                                                 ─► YouTube Short (daily, 18:00 IST)
@@ -16,14 +16,15 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 
 | Secret | Get it from | Cost |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | console.anthropic.com → API Keys | ~₹1–2 per video |
+| `GEMINI_API_KEY` | aistudio.google.com → Get API key | free tier |
+| `ANTHROPIC_API_KEY` *(optional, instead of Gemini)* | console.anthropic.com → API Keys | ~₹1–2 per video |
 | `PEXELS_API_KEY` | pexels.com/api → "Get started" | free |
 | `YT_CLIENT_ID` / `YT_CLIENT_SECRET` / `YT_REFRESH_TOKEN` | step 2 | free |
 
 ### 2. Connect your YouTube channel
 On your computer:
 ```bash
-git clone https://github.com/<you>/silent-stories && cd silent-stories
+git clone https://github.com/discoverymosti/silent-stories && cd silent-stories
 pip install google-auth-oauthlib google-api-python-client
 python scripts/connect_youtube.py
 ```
@@ -45,6 +46,7 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 | Variable | Default |
 |---|---|
 | `YT_PRIVACY` | `private` |
+| `GEMINI_MODEL` | `gemini-2.5-flash` |
 | `CHANNEL_NAME` | `Silent Stories` (shown on end card) |
 | `CHANNEL_HASHTAG` | `#SilentStories` |
 
