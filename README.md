@@ -25,7 +25,9 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 | `YT_CLIENT_ID` / `YT_CLIENT_SECRET` / `YT_REFRESH_TOKEN` | step 2 | free |
 
 ### 2. Connect your YouTube channel
-On your computer:
+**No computer needed:** Actions → **Connect YouTube channel** → Run workflow (leave *code* empty). Open the sign-in link from the log, tap Allow, copy the `http://localhost/?code=...` address you land on, then run the workflow again with it pasted into *code*. The log shows your channel name; the token is saved encrypted as `yt_token.enc`. (Web OAuth clients need `http://localhost` under *Authorized redirect URIs*.)
+
+**Or on your computer:**
 ```bash
 git clone https://github.com/discoverymosti/silent-stories && cd silent-stories
 pip install google-auth-oauthlib google-api-python-client
