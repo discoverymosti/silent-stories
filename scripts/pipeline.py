@@ -295,7 +295,7 @@ def gen_image_cloudflare(prompt: str, dest: Path, seed: int) -> bool:
             f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/@cf/black-forest-labs/flux-1-schnell",
             headers={"Authorization": f"Bearer {token}"},
             json={"prompt": f"{prompt} Centered composition, subject in the middle third."[:2048],
-                  "steps": 8, "seed": seed},
+                  "steps": 8},
             timeout=120,
         )
     except requests.RequestException as e:
