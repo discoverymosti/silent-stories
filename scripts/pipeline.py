@@ -6,7 +6,7 @@ in every language and contains no third-party copyrighted material.
 
 1. Take the next idea from stories.txt
 2. Gemini (or Claude) writes the storyboard + SEO/SMO metadata
-3. Each scene gets an ORIGINAL AI image (Gemini image -> Pollinations fallback),
+3. Each scene gets an ORIGINAL AI image (Gemini image -> Cloudflare FLUX -> Pollinations),
    or stock footage (Pixabay/Pexels) if VISUAL_MODE=stock or AI fails
 4. Auto-edit: Ken Burns camera moves, crossfades, film look, animated captions,
    end card, synthesized music (original, no copyright)
@@ -38,6 +38,7 @@ OUT = ROOT / "out"
 W, H, FPS = 1080, 1920, 30
 XF = 0.5  # crossfade seconds
 FONT = os.getenv("CAPTION_FONT", "Noto Sans")
+FONTS_DIR = os.getenv("FONTS_DIR", "")  # extra fonts folder (static ffmpeg can't rely on system fontconfig)
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")  # empty = auto-pick newest
 GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "")  # empty = auto-pick newest
@@ -46,6 +47,8 @@ PRIVACY = os.getenv("YT_PRIVACY", "private")
 SKIP_UPLOAD = os.getenv("SKIP_UPLOAD", "false").lower() == "true"
 CHANNEL_TAG = os.getenv("CHANNEL_HASHTAG", "#SilentStories")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME", "Silent Stories")
+# refuse to upload if more than this many scenes ended up as plain gradient filler
+MAX_FALLBACK = int(os.getenv("MAX_FALLBACK_SCENES", "2"))
 
 NO_TEXT = ("No text, no letters, no captions, no logos, no watermark, no brand names, "
            "no real celebrities, no copyrighted characters.")
@@ -278,16 +281,59 @@ def gen_image_gemini(prompt: str, dest: Path) -> bool:
     return False
 
 
+_cf_ok = True
+
+
+def gen_image_cloudflare(prompt: str, dest: Path, seed: int) -> bool:
+    """Cloudflare Workers AI FLUX.1 schnell (free daily allowance)."""
+    global _cf_ok
+    acct, token = os.getenv("CF_ACCOUNT_ID"), os.getenv("CF_API_TOKEN")
+    if not (_cf_ok and acct and token):
+        return False
+    try:
+        r = requests.post(
+            f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/@cf/black-forest-labs/flux-1-schnell",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"prompt": f"{prompt} Centered composition, subject in the middle third."[:2048],
+                  "steps": 8, "seed": seed},
+            timeout=120,
+        )
+    except requests.RequestException as e:
+        print(f"    cloudflare error: {e}")
+        return False
+    if r.status_code != 200:
+        print(f"    cloudflare {r.status_code}: {r.text[:200]}")
+        if r.status_code in (401, 403, 429):
+            _cf_ok = False  # bad token or daily allowance used up: stop trying this run
+        return False
+    data = (r.json().get("result") or {}).get("image")
+    if not data:
+        return False
+    dest.write_bytes(base64.b64decode(data))
+    return True
+
+
+_poll_ok = True
+
+
 def gen_image_pollinations(prompt: str, dest: Path, seed: int) -> bool:
+    global _poll_ok
+    if not _poll_ok:
+        return False
     url = (f"https://image.pollinations.ai/prompt/{quote(prompt[:900])}"
            f"?width={W}&height={H}&seed={seed}&nologo=true&model=flux")
+    token = os.getenv("POLLINATIONS_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     for attempt in range(3):
         try:
-            r = requests.get(url, timeout=180)
+            r = requests.get(url, headers=headers, timeout=180)
             if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
                 dest.write_bytes(r.content)
                 return True
             print(f"    pollinations {r.status_code}")
+            if r.status_code in (401, 402, 403):
+                _poll_ok = False  # needs a token/paid tier: stop trying this run
+                return False
         except requests.RequestException as e:
             print(f"    pollinations error: {e}")
         time.sleep(6 * (attempt + 1))
@@ -299,6 +345,8 @@ def gen_image(prompt: str, dest: Path, seed: int) -> str | None:
         return "cached"
     if gen_image_gemini(prompt, dest):
         return "gemini"
+    if gen_image_cloudflare(prompt, dest, seed):
+        return "cloudflare"
     if gen_image_pollinations(prompt, dest, seed):
         time.sleep(3)  # be polite to the free endpoint
         return "pollinations"
@@ -372,6 +420,11 @@ LOOK = "eq=contrast=1.06:saturation=1.03,vignette=PI/5,noise=alls=3:allf=t"
 
 
 def font_file(bold: bool = True) -> str:
+    if FONTS_DIR:
+        name = FONT.replace(" ", "")
+        for cand in (f"{name}-{'Bold' if bold else 'Regular'}.ttf", f"{name}{'-Bold' if bold else ''}.ttf"):
+            if (Path(FONTS_DIR) / cand).exists():
+                return str(Path(FONTS_DIR) / cand)
     try:
         out = subprocess.run(["fc-match", "-f", "%{file}", f"{FONT}:{'bold' if bold else 'regular'}"],
                              capture_output=True, text=True, check=True).stdout.strip()
@@ -591,7 +644,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
 
     final = work / "short.mp4"
-    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}", *ENC,
+    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}" + (f":fontsdir={FONTS_DIR}" if FONTS_DIR else ""), *ENC,
        "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(final))
 
     thumb_img = work / "thumb_src.png"
@@ -641,12 +694,25 @@ def build_metadata(sb: dict, report: dict) -> dict:
 
 # ================================================================ upload
 
+def refresh_token() -> str:
+    """YT_REFRESH_TOKEN secret, else the token saved by the Connect YouTube workflow."""
+    if os.getenv("YT_REFRESH_TOKEN"):
+        return os.environ["YT_REFRESH_TOKEN"]
+    enc = ROOT / "yt_token.enc"
+    if not enc.exists():
+        sys.exit("YouTube not connected: run the 'Connect YouTube channel' workflow "
+                 "or set the YT_REFRESH_TOKEN secret.")
+    return subprocess.run(["openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-a",
+                           "-pass", "env:YT_CLIENT_SECRET"], input=enc.read_bytes(),
+                          capture_output=True, check=True).stdout.decode().strip()
+
+
 def youtube_client():
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
     creds = Credentials(
         token=None,
-        refresh_token=os.environ["YT_REFRESH_TOKEN"],
+        refresh_token=refresh_token(),
         client_id=os.environ["YT_CLIENT_ID"],
         client_secret=os.environ["YT_CLIENT_SECRET"],
         token_uri="https://oauth2.googleapis.com/token",
@@ -716,6 +782,14 @@ def main() -> int:
                                        encoding="utf-8")
     (OUT / "social.txt").write_text(f"{meta['title']}\n\n{meta['social_caption']}\n", encoding="utf-8")
     print(f"Rendered {final} ({report})")
+
+    if report["fallback"] > MAX_FALLBACK:
+        print(f"WARNING: {report['fallback']} of {len(sb['scenes'])} scenes have no real visuals "
+              f"(limit {MAX_FALLBACK}). Add CF_ACCOUNT_ID/CF_API_TOKEN or PIXABAY_API_KEY secrets.")
+        if not SKIP_UPLOAD:
+            print("Not uploading: low-effort videos risk YouTube's reused/repetitive content policy. "
+                  "The story stays at the top of the queue.")
+            return 1
 
     if SKIP_UPLOAD:
         print("Preview only - download short.mp4, thumbnail.jpg and metadata.json from the run's artifacts.")

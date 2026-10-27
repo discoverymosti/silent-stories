@@ -3,7 +3,7 @@
 Automated YouTube Shorts channel. **No voice, no language barrier**: stories told with footage, short captions and music, so they work worldwide.
 
 ```
-stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI images per scene (Gemini → Pollinations,
+stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI images per scene (Gemini → Cloudflare FLUX → Pollinations,
                                                stock footage fallback)
            ─► auto-edit: Ken Burns moves, crossfades, film look, captions, original music
            ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (daily 18:00 IST)
@@ -18,12 +18,16 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 |---|---|---|
 | `GEMINI_API_KEY` | aistudio.google.com → Get API key | free tier |
 | `ANTHROPIC_API_KEY` *(optional, instead of Gemini)* | console.anthropic.com → API Keys | ~₹1–2 per video |
+| `CF_ACCOUNT_ID` / `CF_API_TOKEN` *(recommended: AI images when Gemini's free image quota is 0)* | dash.cloudflare.com → **Workers AI** → *Use REST API*: copy the Account ID, click *Create a Workers AI API Token* | free daily allowance |
+| `POLLINATIONS_TOKEN` *(optional)* | auth.pollinations.ai (anonymous use now returns 402) | free tier |
 | `PIXABAY_API_KEY` *(optional fallback)* | pixabay.com/api/docs (sign in, key is shown on the page) | free |
 | `PEXELS_API_KEY` *(optional extra source)* | pexels.com/api | free |
 | `YT_CLIENT_ID` / `YT_CLIENT_SECRET` / `YT_REFRESH_TOKEN` | step 2 | free |
 
 ### 2. Connect your YouTube channel
-On your computer:
+**No computer needed:** Actions → **Connect YouTube channel** → Run workflow (leave *code* empty). Open the sign-in link from the log, tap Allow, copy the `http://localhost/?code=...` address you land on, then run the workflow again with it pasted into *code*. The log shows your channel name; the token is saved encrypted as `yt_token.enc`. (Web OAuth clients need `http://localhost` under *Authorized redirect URIs*.)
+
+**Or on your computer:**
 ```bash
 git clone https://github.com/discoverymosti/silent-stories && cd silent-stories
 pip install google-auth-oauthlib google-api-python-client
@@ -52,9 +56,11 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 | `VISUAL_MODE` | `ai` (original AI images) or `stock` (Pixabay/Pexels) |
 | `CHANNEL_NAME` | `Silent Stories` (shown on end card) |
 | `CHANNEL_HASHTAG` | `#SilentStories` |
+| `MAX_FALLBACK_SCENES` | `2`: skip the upload if more scenes than this end up as plain gradient filler |
 
 ## Copyright-safe by design
-- Visuals: original AI images (Gemini / Pollinations FLUX), no stock or third-party clips unless AI fails.
+- Visuals: original AI images (Gemini / Cloudflare FLUX / Pollinations), no stock or third-party clips unless AI fails.
+- Quality gate: a video with too many filler scenes is not uploaded (protects monetisation from the low-effort/reused content policy).
 - Music: synthesized in the pipeline (original), or your own royalty-free files in `music/`.
 - AI disclosure: uploads set *altered or synthetic content* when AI visuals are used, as YouTube requires.
 - Custom thumbnails need a phone-verified channel: youtube.com/verify
