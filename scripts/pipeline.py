@@ -82,11 +82,54 @@ def mark_done(idea: str, video_id: str | None) -> None:
         f.write(f"{idea} | {(base + video_id) if video_id else 'not uploaded'}\n")
 
 
+REFILL_PROMPT = """You plan content for "{channel}", a worldwide YouTube channel of SILENT stories:
+no voiceover, no dialogue, only cinematic images, short captions and music.
+Write {n} NEW, original {kind} ideas for a global audience (any country; universal emotions).
+Each idea: one sentence with a clear character, situation and emotional or surprising payoff.
+{genres}
+Do not repeat or closely resemble any of these existing ideas:
+{existing}
+Return ONLY JSON: {{"ideas": [{{"genre": str, "idea": str}}]}}"""
+
+
+def refill_queue(min_left: int = 2 if FILM else 5) -> None:
+    """Never run dry: when few ideas are left, ask the AI for fresh original ones."""
+    lines = STORIES.read_text(encoding="utf-8").splitlines()
+    left = [l for l in lines if l.strip() and not l.lstrip().startswith("#")]
+    if len(left) >= min_left or not (os.getenv("GEMINI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")):
+        return
+    existing = [l.split("|", 1)[-1].strip()[:90] for l in left]
+    if DONE.exists():
+        existing += [l.split("|")[0].strip()[:90] for l in DONE.read_text(encoding="utf-8").splitlines() if l.strip()]
+    n = 4 if FILM else 10
+    prompt = REFILL_PROMPT.format(
+        channel=CHANNEL_NAME, n=n,
+        kind="three-act short-film (about 3 minutes)" if FILM else "YouTube Shorts (about 50 seconds)",
+        genres='genre is always "story".' if FILM else
+        'Mix genres: about half "story" (emotional micro-drama), a quarter "explainer" (how something '
+        'works) and a quarter "fact" (surprising true fact, must be accurate).',
+        existing="\n".join(f"- {e}" for e in existing[-60:]) or "- (none)")
+    try:
+        text = ask_gemini(prompt) if os.getenv("GEMINI_API_KEY") else ask_claude(prompt)
+        ideas = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))["ideas"]
+    except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
+        print(f"  could not refill {STORIES.name}: {e}")
+        return
+    new = [f"{(i.get('genre') or 'story').strip().lower()} | {' '.join(str(i['idea']).split())}"
+           for i in ideas if isinstance(i, dict) and i.get("idea")]
+    if new:
+        STORIES.write_text("\n".join(lines).rstrip() + "\n" + "\n".join(new) + "\n", encoding="utf-8")
+        print(f"  added {len(new)} fresh ideas to {STORIES.name}")
+
+
 # ================================================================ storyboard + SEO
 
 STORYBOARD_PROMPT = """You are the director and growth marketer of "{channel}", a YouTube
 Shorts channel. Videos have NO voiceover and NO dialogue: they tell a story only through
 cinematic images, very short on-screen captions and music, so anyone in any country can follow.
+The audience is GLOBAL (Americas, Europe, Asia, Africa, Middle East): use universal emotions and
+settings, characters of varied ethnicities and cultures, no country-specific festivals, slang or
+symbols unless the idea itself needs them, and simple English any viewer can read.
 
 Genre: {genre}   ("story" = emotional micro-drama / short film, "explainer" = how something
                   works, "fact" = surprising true fact told visually)
@@ -100,16 +143,27 @@ STORY RULES
 - "ending": shareable closing line, max 8 words.
 - "music_mood": one of warm, sad, tense, curious, uplifting.
 
-VISUAL RULES (images are AI-generated, must stay consistent)
-- "style": one visual style for the whole film (e.g. "cinematic film still, soft golden
-  light, shallow depth of field, 35mm, muted teal-orange grade").
-- "characters": short fixed description of each recurring character (age, clothes, hair)
-  so every scene shows the SAME people. Use "" if none.
-- each scene "image_prompt": one vivid, concrete, filmable shot (subject, action, setting,
-  framing such as close-up / wide shot). Original people only, no celebrities, brands,
-  logos, readable text, or copyrighted characters.
-- each scene "camera": one of zoom_in, zoom_out, pan_left, pan_right, pan_up.
-- each scene "query": 2-4 word stock-video search fallback (e.g. "rain on window").
+VISUAL RULES (images are AI-generated; work like a film crew so every shot matches)
+- First write the blueprint, then the shots. Every image is generated separately, so
+  consistency comes ONLY from re-using the exact same saved descriptions.
+- "style": one visual style for the whole film (e.g. "cinematic film still, 35mm lens,
+  shallow depth of field, soft film grain").
+- "grade": one colour grade for the whole film: warm, cool, teal_orange, golden, muted or noir.
+- "cast": saved character elements, 1-3 people/animals:
+  [{{"id": "A", "name": "short role noun, e.g. old kite maker", "look": "fixed visual
+  description: age, ethnicity, build, hair, face, exact clothes and colours"}}].
+  Same clothes all film unless the story says otherwise. Names must be distinct.
+- "locations": saved location elements, 1-4 places:
+  [{{"id": "L1", "look": "fixed description: place, era, materials, colours, time of day"}}].
+- each scene, as structured fields:
+  "shot": wide, medium, close-up, extreme close-up or over-the-shoulder (vary them),
+  "image_prompt": the subject and action only, concrete and filmable,
+  "cast": ids of characters visible (e.g. ["A"]) or [],
+  "location": one location id,
+  "lighting": e.g. "warm window light from the left, soft shadows",
+  "camera": one of zoom_in, zoom_out, pan_left, pan_right, pan_up,
+  "query": 2-4 word stock-video search fallback (e.g. "rain on window").
+- Original people only, no celebrities, brands, logos, readable text, or copyrighted characters.
 
 SEO / SMO RULES
 - "title": max 60 chars, main search keyword in the first 4 words, emotional curiosity,
@@ -121,19 +175,21 @@ SEO / SMO RULES
 - "tags": 12-15 search keywords/phrases people actually type, broad to specific.
 - "social_caption": an Instagram/Facebook caption (2-3 lines + 8-10 hashtags + 1 emoji max).
 - "thumbnail_prompt": the single most eye-catching vertical image for this story,
-  same style and characters, strong emotion, clean background space at the top.
+  same style and cast (refer to them by id, e.g. "A smiling through tears"), strong
+  emotion, clean background space at the top.
 - "thumbnail_text": 2-4 words, punchy, uppercase.
 
 Return ONLY valid JSON with exactly these keys:
 {{"title": str, "description": str, "hashtags": [str], "tags": [str],
   "social_caption": str, "thumbnail_prompt": str, "thumbnail_text": str,
-  "style": str, "characters": str, "music_mood": str, "ending": str,
-  "scenes": [{{"image_prompt": str, "camera": str, "query": str,
-               "caption": str, "seconds": number}}]}}"""
+  "style": str, "grade": str, "music_mood": str, "ending": str,
+  "cast": [{{"id": str, "name": str, "look": str}}], "locations": [{{"id": str, "look": str}}],
+  "scenes": [{{"shot": str, "image_prompt": str, "cast": [str], "location": str,
+               "lighting": str, "camera": str, "query": str, "caption": str, "seconds": number}}]}}"""
 
 
 FILM_RULES = """STORY RULES (weekly widescreen SHORT FILM, not a Short)
-- 26 to 34 scenes, total 150-200 seconds, each scene 4-8 seconds.
+- 18 to 24 scenes, total 150-190 seconds, each scene 6-10 seconds (let shots breathe).
 - Three acts: setup (who, where, what they want) -> conflict / obstacle -> turning point
   -> emotional resolution. Give the main character a clear goal and a visible change.
 - Scene 1-2 are the HOOK: a striking image + a caption that creates a question.
@@ -213,7 +269,7 @@ def ask_gemini(prompt: str) -> str:
                     parts = r.json()["candidates"][0]["content"]["parts"]
                     text = "".join(p.get("text", "") for p in parts)
                     json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
-                    print(f"  storyboard by {model}")
+                    print(f"  answer by {model}")
                     return text
                 except (KeyError, IndexError, ValueError) as e:
                     last = f"bad response: {e}"
@@ -248,12 +304,18 @@ def storyboard(genre: str, idea: str) -> dict:
         raise SystemExit("Set GEMINI_API_KEY or ANTHROPIC_API_KEY.")
     sb = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
     for s in sb["scenes"]:
-        s["seconds"] = max(3.0, min(9.0 if FILM else 7.0, float(s.get("seconds", 4.5))))
+        s["seconds"] = max(3.0, min(10.0 if FILM else 7.0, float(s.get("seconds", 4.5))))
         s.setdefault("camera", "zoom_in")
         s.setdefault("query", s.get("image_prompt", "")[:40])
         s.setdefault("caption", "")
+        if isinstance(s.get("cast"), str):
+            s["cast"] = [s["cast"]]
     sb.setdefault("style", "cinematic film still, soft natural light, 35mm, shallow depth of field")
     sb.setdefault("characters", "")
+    sb["cast"] = [c for c in sb.get("cast") or [] if isinstance(c, dict) and c.get("look")]
+    sb["locations"] = [l for l in sb.get("locations") or [] if isinstance(l, dict) and l.get("look")]
+    if sb.get("grade") not in GRADES:
+        sb["grade"] = "teal_orange"
     sb.setdefault("hashtags", [])
     sb.setdefault("tags", [])
     return sb
@@ -264,9 +326,30 @@ def storyboard(genre: str, idea: str) -> dict:
 _gemini_img_ok = True
 
 
-def full_prompt(sb: dict, shot: str) -> str:
-    chars = f" Characters: {sb['characters']}." if sb.get("characters") else ""
-    return f"{shot}.{chars} Style: {sb['style']}. {'Widescreen 16:9' if FILM else 'Vertical 9:16'} photo. {NO_TEXT}"
+def full_prompt(sb: dict, scene: dict | str) -> str:
+    """Labelled, structured prompt built from the saved cast/location elements, so every
+    shot repeats the exact same character and place descriptions."""
+    if isinstance(scene, str):
+        scene = {"image_prompt": scene, "cast": [c["id"] for c in sb.get("cast", [])]}
+    cast = {c["id"]: c["look"] for c in sb.get("cast", [])}
+    names = {c["id"]: c.get("name") or "person" for c in sb.get("cast", [])}
+    places = {l["id"]: l["look"] for l in sb.get("locations", [])}
+    ids = [i for i in scene.get("cast") or [] if i in cast]
+    action = scene.get("image_prompt", "")
+    for i in ids:  # "A smiles" -> "the old kite maker smiles": no letters for the model to draw
+        action = re.sub(rf"\b{re.escape(i)}\b", f"the {names[i]}", action)
+    parts = [f"Shot: {scene.get('shot') or 'medium shot'}", f"Action: {action}"]
+    if ids:
+        parts.append("Characters: " + "; ".join(f"the {names[i]}: {cast[i]}" for i in ids))
+    elif sb.get("characters"):
+        parts.append(f"Characters: {sb['characters']}")
+    if scene.get("location") in places:
+        parts.append(f"Location: {places[scene['location']]}")
+    if scene.get("lighting"):
+        parts.append(f"Lighting: {scene['lighting']}")
+    parts += [f"Style: {sb['style']}", f"Colour grade: {sb.get('grade', 'teal_orange').replace('_', '-')}",
+              f"Format: {'widescreen 16:9' if FILM else 'vertical 9:16'} cinematic photo"]
+    return ". ".join(parts) + f". {NO_TEXT}"
 
 
 def gen_image_gemini(prompt: str, dest: Path) -> bool:
@@ -317,7 +400,7 @@ def gen_image_cloudflare(prompt: str, dest: Path, seed: int) -> bool:
             f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/@cf/black-forest-labs/flux-1-schnell",
             headers={"Authorization": f"Bearer {token}"},
             json={"prompt": f"{prompt} Centered composition, subject in the middle third."[:2048],
-                  "steps": 8},
+                  "steps": 4},  # schnell's native step count; cost scales with steps
             timeout=120,
         )
     except requests.RequestException as e:
@@ -382,17 +465,18 @@ def pexels_search(query: str, used: set[int]) -> str | None:
     if not key:
         return None
     r = requests.get("https://api.pexels.com/videos/search", headers={"Authorization": key},
-                     params={"query": query, "orientation": "portrait", "per_page": 15}, timeout=30)
+                     params={"query": query, "orientation": "landscape" if FILM else "portrait", "per_page": 15}, timeout=30)
     if r.status_code != 200:
         return None
     for v in r.json().get("videos", []):
         if v["id"] in used or v.get("duration", 0) < 3:
             continue
         files = [f for f in v["video_files"] if f.get("height") and f.get("width")
-                 and f["height"] >= f["width"] and f["height"] >= 1280 and f.get("file_type") == "video/mp4"]
+                 and (f["width"] >= f["height"]) == FILM and max(f["width"], f["height"]) >= 1280
+                 and f.get("file_type") == "video/mp4"]
         if files:
             used.add(v["id"])
-            return min(files, key=lambda f: abs(f["height"] - 1920))["link"]
+            return min(files, key=lambda f: abs(max(f["width"], f["height"]) - 1920))["link"]
     return None
 
 
@@ -405,7 +489,8 @@ def pixabay_search(query: str, used: set[int]) -> str | None:
     if r.status_code != 200:
         return None
     hits = [h for h in r.json().get("hits", []) if h["id"] not in used and h.get("duration", 0) >= 3]
-    hits.sort(key=lambda h: h["videos"]["medium"].get("height", 0) <= h["videos"]["medium"].get("width", 1))
+    # prefer clips whose orientation matches the frame
+    hits.sort(key=lambda h: (h["videos"]["medium"].get("height", 0) > h["videos"]["medium"].get("width", 1)) == FILM)
     for h in hits:
         for size in ("large", "medium"):
             v = h["videos"].get(size) or {}
@@ -438,7 +523,21 @@ def ff(*args: str) -> None:
 
 
 ENC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p", "-r", str(FPS)]
-LOOK = "eq=contrast=1.06:saturation=1.03,vignette=PI/5,noise=alls=3:allf=t"
+GRADES = {  # one grade per film keeps every shot's colour consistent
+    "warm":        "colorbalance=rs=.05:gs=.02:bs=-.05:rm=.04:bm=-.04",
+    "cool":        "colorbalance=rs=-.04:bs=.06:rm=-.03:bm=.05",
+    "teal_orange": "colorbalance=rs=-.05:bs=.07:rh=.07:gh=.02:bh=-.07",
+    "golden":      "colorbalance=rm=.06:gm=.03:bm=-.06:rh=.05:bh=-.05",
+    "muted":       "eq=saturation=0.82",
+    "noir":        "hue=s=0,eq=contrast=1.12",
+}
+_BASE_LOOK = "eq=contrast=1.06:saturation=1.03,vignette=PI/5,noise=alls=3:allf=t"
+LOOK = _BASE_LOOK
+
+
+def set_grade(grade: str) -> None:
+    global LOOK
+    LOOK = f"{GRADES.get(grade, GRADES['teal_orange'])},{_BASE_LOOK}"
 
 
 def font_file(bold: bool = True) -> str:
@@ -525,7 +624,8 @@ def ass_escape(text: str) -> str:
 
 
 def write_captions(scenes: list[dict], starts: list[float], ending: str,
-                   end_start: float, end_len: float, dest: Path) -> None:
+                   end_start: float, end_len: float, dest: Path, title: str = "",
+                   title_len: float = 0.0) -> None:
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -536,12 +636,18 @@ WrapStyle: 0
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,{FONT},{64 if FILM else 78},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,5,3,2,90,90,{90 if FILM else 520},1
 Style: End,{FONT},92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,0,0,5,110,110,0,1
+Style: Title,{FONT},96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,0,0,5,160,160,0,1
 Style: Tag,{FONT},44,&H00B4B4B4,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4,0,1,0,0,2,90,90,{220 if FILM else 300},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = []
+    if title:  # film opening card: title, then the channel credit
+        lines.append(f"Dialogue: 0,{ass_time(0.4)},{ass_time(title_len - 0.2)},Title,,0,0,0,,"
+                     f"{{\\fad(700,500)}}{ass_escape(title)}")
+        lines.append(f"Dialogue: 0,{ass_time(1.1)},{ass_time(title_len - 0.2)},Tag,,0,0,0,,"
+                     f"{{\\fad(700,500)}}{ass_escape(('a ' + CHANNEL_NAME + ' silent film').upper())}")
     for s, t in zip(scenes, starts):
         cap = ass_escape(s.get("caption", "").strip())
         if cap:
@@ -555,12 +661,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     dest.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
 
 
-CHORDS = {  # slow 2-chord loop per mood (original synthesized music, no copyright)
-    "warm":      [(261.6, 329.6, 392.0), (220.0, 261.6, 329.6)],
-    "sad":       [(220.0, 261.6, 329.6), (174.6, 220.0, 261.6)],
-    "tense":     [(196.0, 233.1, 293.7), (185.0, 233.1, 277.2)],
-    "curious":   [(293.7, 349.2, 440.0), (261.6, 329.6, 392.0)],
-    "uplifting": [(261.6, 329.6, 392.0), (293.7, 370.0, 440.0)],
+_C, _G, _AM, _F = (261.6, 329.6, 392.0), (196.0, 246.9, 293.7), (220.0, 261.6, 329.6), (174.6, 220.0, 261.6)
+_DM, _E, _EM, _D = (146.8, 174.6, 220.0), (164.8, 207.7, 246.9), (164.8, 196.0, 246.9), (146.8, 185.0, 220.0)
+CHORDS = {  # 4-chord progression per mood (original synthesized music, no copyright)
+    "warm":      [_C, _G, _AM, _F],
+    "sad":       [_AM, _F, _C, _G],
+    "tense":     [_AM, _F, _DM, _E],
+    "curious":   [_F, _G, _EM, _AM],
+    "uplifting": [_G, _D, _EM, _C],
 }
 
 
@@ -575,13 +683,17 @@ def make_music(mood: str, seconds: float, dest: Path) -> str:
            "-c:a", "aac", "-b:a", "192k", str(dest))
         return track.name
     chords = CHORDS.get(mood, CHORDS["warm"])
-    half = 4.0
+    bar, step = 4.0, 0.5  # 4 s per chord; arpeggio note every 0.5 s
+    cycle = bar * len(chords)
     tones = []
-    for f1, f2 in zip(*chords):
-        for f, lo in ((f1, 0), (f2, half)):
-            gate = f"between(mod(t,{half * 2}),{lo},{lo + half})"
-            tones.append(f"0.09*sin(2*PI*{f / 2:.2f}*t)*{gate}")
-            tones.append(f"0.04*sin(2*PI*{f:.2f}*t+0.3*sin(2*PI*0.2*t))*{gate}")
+    for k, chord in enumerate(chords):
+        gate = f"between(mod(t,{cycle}),{k * bar},{(k + 1) * bar - 0.001})"
+        for n, f in enumerate(chord):
+            tones.append(f"0.07*sin(2*PI*{f / 2:.2f}*t)*{gate}")  # warm pad, an octave down
+            tones.append(f"0.03*sin(2*PI*{f:.2f}*t+0.3*sin(2*PI*0.2*t))*{gate}")
+            # soft plucked arpeggio an octave up, cycling through the chord tones
+            tones.append(f"0.035*sin(2*PI*{f * 2:.2f}*t)*exp(-5*mod(t,{step}))"
+                         f"*eq(mod(floor(t/{step}),3),{n})*{gate}")
     af = (f"lowpass=f=1800,aecho=0.8:0.85:500|900:0.35|0.25,"
           f"tremolo=f=0.25:d=0.3,afade=t=in:d=2,afade=t=out:st={fade_out:.2f}:d=2.5,volume=1.6")
     ff("-f", "lavfi", "-t", f"{seconds:.2f}", "-i", f"aevalsrc='{'+'.join(tones)}':s=44100:c=stereo",
@@ -637,6 +749,13 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     used: set[int] = set()
     parts, lengths, report = [], [], {"ai": 0, "stock": 0, "fallback": 0}
     base_seed = random.randint(1, 10_000_000)
+    set_grade(sb.get("grade", "teal_orange"))
+    intro_len = 3.5 + XF if FILM else 0.0
+    if FILM:
+        intro = work / "intro.mp4"
+        end_card(intro_len, intro)
+        parts.append(intro)
+        lengths.append(intro_len)
     for i, s in enumerate(sb["scenes"]):
         L = s["seconds"] + XF  # extra overlap for crossfade
         part = work / f"scene_{i:02d}.mp4"
@@ -644,7 +763,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
         raw = work / f"raw_{i:02d}.mp4"
         src = None
         if VISUAL_MODE == "ai":
-            src = gen_image(full_prompt(sb, s["image_prompt"]), img, base_seed + i)
+            src = gen_image(full_prompt(sb, s), img, base_seed + i)
         if src:
             kenburns(img, L, s["camera"], part)
             report["ai"] += 1
@@ -656,7 +775,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
             gradient_scene(L, part, i)
             src = "fallback"
             report["fallback"] += 1
-        print(f"  scene {i + 1:2d} [{src:12}] {s['camera']:9} | {s.get('caption', '')}")
+        print(f"  scene {i + 1:2d} [{src:12}] {s['camera']:9} {str(s.get('shot', ''))[:11]:11} | {s.get('caption', '')}")
         parts.append(part)
         lengths.append(L)
 
@@ -670,7 +789,9 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     starts = crossfade_all(parts, lengths, joined)
     total = starts[-1] + lengths[-1]
     subs = work / "captions.ass"
-    write_captions(sb["scenes"], starts, sb["ending"], starts[-1], lengths[-1], subs)
+    scene_starts = starts[1:] if FILM else starts
+    write_captions(sb["scenes"], scene_starts, sb["ending"], starts[-1], lengths[-1], subs,
+                   title=sb["title"] if FILM else "", title_len=intro_len)
     music = work / "music.m4a"
     report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
 
@@ -703,7 +824,7 @@ def build_metadata(sb: dict, report: dict) -> dict:
     hashtags = [("#" + re.sub(r"[^\w]", "", h.lstrip("#"))) for h in sb.get("hashtags", []) if h.strip()]
     hashtags = list(dict.fromkeys(hashtags + [CHANNEL_TAG, "#ShortFilm" if FILM else "#Shorts"]))[:6]
     tags, total = [], 0
-    for t in [clean_tag(x) for x in sb.get("tags", [])] + ["silent stories", "no words story", "short film"]:
+    for t in [clean_tag(x) for x in sb.get("tags", [])] + [CHANNEL_NAME, "silent stories", "no words story", "short film"]:
         if t and t.lower() not in (x.lower() for x in tags) and total + len(t) + 3 < 480:
             tags.append(t)
             total += len(t) + 3
@@ -775,9 +896,17 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
     req = yt.videos().insert(
         part="snippet,status", body=body,
         media_body=MediaFileUpload(str(video), mimetype="video/mp4", chunksize=-1, resumable=True))
-    resp = None
+    resp, retries = None, 0
     while resp is None:
-        _, resp = req.next_chunk()
+        try:
+            _, resp = req.next_chunk()
+        except (HttpError, OSError) as e:
+            status = getattr(e, "status_code", None) or getattr(getattr(e, "resp", None), "status", None)
+            if retries >= 5 or (status is not None and int(status) < 500):
+                raise
+            retries += 1
+            print(f"  upload hiccup ({e}); retry {retries}/5")
+            time.sleep(2 ** retries)
     vid = resp["id"]
     link = f"https://youtu.be/{vid}" if FILM else f"https://youtube.com/shorts/{vid}"
     print(f"Uploaded as {resp['status']['privacyStatus']}: {link}")
@@ -793,9 +922,10 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
 # ================================================================ main
 
 def main() -> int:
+    refill_queue()
     item = next_story()
     if not item:
-        print("stories.txt is empty - add more ideas.")
+        print(f"{STORIES.name} is empty - add more ideas.")
         return 0
     genre, idea = item
     print(f"[{genre}] {idea}")
@@ -817,7 +947,8 @@ def main() -> int:
 
     if report["fallback"] > MAX_FALLBACK:
         print(f"WARNING: {report['fallback']} of {len(sb['scenes'])} scenes have no real visuals "
-              f"(limit {MAX_FALLBACK}). Add CF_ACCOUNT_ID/CF_API_TOKEN or PIXABAY_API_KEY secrets.")
+              f"(limit {MAX_FALLBACK}). Usually the free AI image allowance is used up for today "
+              f"(Cloudflare resets 00:00 UTC) or CF_ACCOUNT_ID/CF_API_TOKEN are missing.")
         if not SKIP_UPLOAD:
             print("Not uploading: low-effort videos risk YouTube's reused/repetitive content policy. "
                   "The story stays at the top of the queue.")

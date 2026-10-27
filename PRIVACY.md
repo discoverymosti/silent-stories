@@ -1,16 +1,18 @@
 # Privacy Policy: Silent Stories Uploader
 
-_Last updated: 27 October 2026_
+_Last updated: 27 October 2026 (storage section revised)_
 
 Silent Stories Uploader is a personal automation tool operated by the owner of the
-"Silent Stories" YouTube channel. It is used only by its owner to upload videos to their own channel.
+DiscoveryMosti YouTube channel. It is used only by its owner to upload videos to their own channel.
 
 **Data accessed.** With the owner's permission (Google OAuth), the tool uses the YouTube Data API
 to upload videos, set thumbnails and read the owner's own channel name. It does not access any
 other user's data.
 
-**Data storage.** OAuth credentials are stored only as encrypted GitHub Actions secrets in the
-owner's private configuration. No personal data is collected, sold or shared with third parties.
+**Data storage.** The OAuth client credentials are stored as encrypted GitHub Actions secrets.
+The YouTube refresh token is stored either as a GitHub Actions secret or as an AES-256 encrypted
+file in the repository that can only be decrypted with the client secret held in those secrets.
+No personal data is collected, sold or shared with third parties.
 
 **Revoking access.** Access can be revoked at any time at https://myaccount.google.com/permissions.
 
