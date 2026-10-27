@@ -103,16 +103,27 @@ STORY RULES
 - "ending": shareable closing line, max 8 words.
 - "music_mood": one of warm, sad, tense, curious, uplifting.
 
-VISUAL RULES (images are AI-generated, must stay consistent)
-- "style": one visual style for the whole film (e.g. "cinematic film still, soft golden
-  light, shallow depth of field, 35mm, muted teal-orange grade").
-- "characters": short fixed description of each recurring character (age, clothes, hair)
-  so every scene shows the SAME people. Use "" if none.
-- each scene "image_prompt": one vivid, concrete, filmable shot (subject, action, setting,
-  framing such as close-up / wide shot). Original people only, no celebrities, brands,
-  logos, readable text, or copyrighted characters.
-- each scene "camera": one of zoom_in, zoom_out, pan_left, pan_right, pan_up.
-- each scene "query": 2-4 word stock-video search fallback (e.g. "rain on window").
+VISUAL RULES (images are AI-generated; work like a film crew so every shot matches)
+- First write the blueprint, then the shots. Every image is generated separately, so
+  consistency comes ONLY from re-using the exact same saved descriptions.
+- "style": one visual style for the whole film (e.g. "cinematic film still, 35mm lens,
+  shallow depth of field, soft film grain").
+- "grade": one colour grade for the whole film: warm, cool, teal_orange, golden, muted or noir.
+- "cast": saved character elements, 1-3 people/animals:
+  [{{"id": "A", "name": "short role noun, e.g. old kite maker", "look": "fixed visual
+  description: age, ethnicity, build, hair, face, exact clothes and colours"}}].
+  Same clothes all film unless the story says otherwise. Names must be distinct.
+- "locations": saved location elements, 1-4 places:
+  [{{"id": "L1", "look": "fixed description: place, era, materials, colours, time of day"}}].
+- each scene, as structured fields:
+  "shot": wide, medium, close-up, extreme close-up or over-the-shoulder (vary them),
+  "image_prompt": the subject and action only, concrete and filmable,
+  "cast": ids of characters visible (e.g. ["A"]) or [],
+  "location": one location id,
+  "lighting": e.g. "warm window light from the left, soft shadows",
+  "camera": one of zoom_in, zoom_out, pan_left, pan_right, pan_up,
+  "query": 2-4 word stock-video search fallback (e.g. "rain on window").
+- Original people only, no celebrities, brands, logos, readable text, or copyrighted characters.
 
 SEO / SMO RULES
 - "title": max 60 chars, main search keyword in the first 4 words, emotional curiosity,
@@ -124,15 +135,17 @@ SEO / SMO RULES
 - "tags": 12-15 search keywords/phrases people actually type, broad to specific.
 - "social_caption": an Instagram/Facebook caption (2-3 lines + 8-10 hashtags + 1 emoji max).
 - "thumbnail_prompt": the single most eye-catching vertical image for this story,
-  same style and characters, strong emotion, clean background space at the top.
+  same style and cast (refer to them by id, e.g. "A smiling through tears"), strong
+  emotion, clean background space at the top.
 - "thumbnail_text": 2-4 words, punchy, uppercase.
 
 Return ONLY valid JSON with exactly these keys:
 {{"title": str, "description": str, "hashtags": [str], "tags": [str],
   "social_caption": str, "thumbnail_prompt": str, "thumbnail_text": str,
-  "style": str, "characters": str, "music_mood": str, "ending": str,
-  "scenes": [{{"image_prompt": str, "camera": str, "query": str,
-               "caption": str, "seconds": number}}]}}"""
+  "style": str, "grade": str, "music_mood": str, "ending": str,
+  "cast": [{{"id": str, "name": str, "look": str}}], "locations": [{{"id": str, "look": str}}],
+  "scenes": [{{"shot": str, "image_prompt": str, "cast": [str], "location": str,
+               "lighting": str, "camera": str, "query": str, "caption": str, "seconds": number}}]}}"""
 
 
 FILM_RULES = """STORY RULES (weekly widescreen SHORT FILM, not a Short)
@@ -255,8 +268,14 @@ def storyboard(genre: str, idea: str) -> dict:
         s.setdefault("camera", "zoom_in")
         s.setdefault("query", s.get("image_prompt", "")[:40])
         s.setdefault("caption", "")
+        if isinstance(s.get("cast"), str):
+            s["cast"] = [s["cast"]]
     sb.setdefault("style", "cinematic film still, soft natural light, 35mm, shallow depth of field")
     sb.setdefault("characters", "")
+    sb["cast"] = [c for c in sb.get("cast") or [] if isinstance(c, dict) and c.get("look")]
+    sb["locations"] = [l for l in sb.get("locations") or [] if isinstance(l, dict) and l.get("look")]
+    if sb.get("grade") not in GRADES:
+        sb["grade"] = "teal_orange"
     sb.setdefault("hashtags", [])
     sb.setdefault("tags", [])
     return sb
@@ -267,9 +286,30 @@ def storyboard(genre: str, idea: str) -> dict:
 _gemini_img_ok = True
 
 
-def full_prompt(sb: dict, shot: str) -> str:
-    chars = f" Characters: {sb['characters']}." if sb.get("characters") else ""
-    return f"{shot}.{chars} Style: {sb['style']}. {'Widescreen 16:9' if FILM else 'Vertical 9:16'} photo. {NO_TEXT}"
+def full_prompt(sb: dict, scene: dict | str) -> str:
+    """Labelled, structured prompt built from the saved cast/location elements, so every
+    shot repeats the exact same character and place descriptions."""
+    if isinstance(scene, str):
+        scene = {"image_prompt": scene, "cast": [c["id"] for c in sb.get("cast", [])]}
+    cast = {c["id"]: c["look"] for c in sb.get("cast", [])}
+    names = {c["id"]: c.get("name") or "person" for c in sb.get("cast", [])}
+    places = {l["id"]: l["look"] for l in sb.get("locations", [])}
+    ids = [i for i in scene.get("cast") or [] if i in cast]
+    action = scene.get("image_prompt", "")
+    for i in ids:  # "A smiles" -> "the old kite maker smiles": no letters for the model to draw
+        action = re.sub(rf"\b{re.escape(i)}\b", f"the {names[i]}", action)
+    parts = [f"Shot: {scene.get('shot') or 'medium shot'}", f"Action: {action}"]
+    if ids:
+        parts.append("Characters: " + "; ".join(f"the {names[i]}: {cast[i]}" for i in ids))
+    elif sb.get("characters"):
+        parts.append(f"Characters: {sb['characters']}")
+    if scene.get("location") in places:
+        parts.append(f"Location: {places[scene['location']]}")
+    if scene.get("lighting"):
+        parts.append(f"Lighting: {scene['lighting']}")
+    parts += [f"Style: {sb['style']}", f"Colour grade: {sb.get('grade', 'teal_orange').replace('_', '-')}",
+              f"Format: {'widescreen 16:9' if FILM else 'vertical 9:16'} cinematic photo"]
+    return ". ".join(parts) + f". {NO_TEXT}"
 
 
 def gen_image_gemini(prompt: str, dest: Path) -> bool:
@@ -443,7 +483,21 @@ def ff(*args: str) -> None:
 
 
 ENC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p", "-r", str(FPS)]
-LOOK = "eq=contrast=1.06:saturation=1.03,vignette=PI/5,noise=alls=3:allf=t"
+GRADES = {  # one grade per film keeps every shot's colour consistent
+    "warm":        "colorbalance=rs=.05:gs=.02:bs=-.05:rm=.04:bm=-.04",
+    "cool":        "colorbalance=rs=-.04:bs=.06:rm=-.03:bm=.05",
+    "teal_orange": "colorbalance=rs=-.05:bs=.07:rh=.07:gh=.02:bh=-.07",
+    "golden":      "colorbalance=rm=.06:gm=.03:bm=-.06:rh=.05:bh=-.05",
+    "muted":       "eq=saturation=0.82",
+    "noir":        "hue=s=0,eq=contrast=1.12",
+}
+_BASE_LOOK = "eq=contrast=1.06:saturation=1.03,vignette=PI/5,noise=alls=3:allf=t"
+LOOK = _BASE_LOOK
+
+
+def set_grade(grade: str) -> None:
+    global LOOK
+    LOOK = f"{GRADES.get(grade, GRADES['teal_orange'])},{_BASE_LOOK}"
 
 
 def font_file(bold: bool = True) -> str:
@@ -648,6 +702,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     used: set[int] = set()
     parts, lengths, report = [], [], {"ai": 0, "stock": 0, "fallback": 0}
     base_seed = random.randint(1, 10_000_000)
+    set_grade(sb.get("grade", "teal_orange"))
     for i, s in enumerate(sb["scenes"]):
         L = s["seconds"] + XF  # extra overlap for crossfade
         part = work / f"scene_{i:02d}.mp4"
@@ -655,7 +710,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
         raw = work / f"raw_{i:02d}.mp4"
         src = None
         if VISUAL_MODE == "ai":
-            src = gen_image(full_prompt(sb, s["image_prompt"]), img, base_seed + i)
+            src = gen_image(full_prompt(sb, s), img, base_seed + i)
         if src:
             kenburns(img, L, s["camera"], part)
             report["ai"] += 1
@@ -667,7 +722,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
             gradient_scene(L, part, i)
             src = "fallback"
             report["fallback"] += 1
-        print(f"  scene {i + 1:2d} [{src:12}] {s['camera']:9} | {s.get('caption', '')}")
+        print(f"  scene {i + 1:2d} [{src:12}] {s['camera']:9} {str(s.get('shot', ''))[:11]:11} | {s.get('caption', '')}")
         parts.append(part)
         lengths.append(L)
 

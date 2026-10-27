@@ -46,6 +46,11 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 Every **Sunday 16:10 UTC** (12:10 New York, 17:10 Paris, 21:40 India) the same workflow makes a **~3 minute widescreen (16:9) silent short film**: 26-34 AI scenes in three acts, captions, original score, watermark and thumbnail. It uploads as a normal video (not a Short), from the queue in `films.txt`.
 Run one now: **Actions → Silent Stories - Publish Short → Run workflow → format: film**.
 
+### How films stay consistent (film-crew workflow)
+1. **Blueprint first:** the AI writes the story, then saves **cast** elements (fixed look, clothes) and **location** elements (fixed place, light, time of day).
+2. **Structured shots:** every scene is labelled data: shot type, action, cast, location, lighting and camera move. It becomes a labelled prompt that repeats the exact saved descriptions.
+3. **One colour grade per film** (warm, cool, teal-orange, golden, muted or noir) is applied to every shot so they cut together.
+
 ## Watermark
 Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on Shorts, clear of the Shorts buttons; bottom-right on films). Change it with the `WATERMARK` variable (empty = none). For YouTube's clickable *subscribe* watermark, also upload your logo in YouTube Studio → Customisation → Branding → Video watermark.
 
