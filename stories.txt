@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | The Last Seat: on a crowded bus a tired student gives his seat to an old woman, and the kindness quietly passes from stranger to stranger
 explainer | How a zipper works: the tiny teeth, the slider wedge, and why it never needs glue
 story | A father secretly skips his own lunch every day so his daughter can buy hers; years later she notices
 fact | Why the ocean is salty: rivers carry minerals for millions of years and the sea never lets them go
