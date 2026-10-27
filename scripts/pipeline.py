@@ -432,6 +432,10 @@ def font_file(bold: bool = True) -> str:
             return out
     except (OSError, subprocess.CalledProcessError):
         pass
+    for pattern in ("NotoSans-Bold.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "*Bold*.ttf", "*.ttf"):
+        hits = sorted(Path("/usr/share/fonts").rglob(pattern))
+        if hits:
+            return str(hits[0])
     return "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 
@@ -649,7 +653,11 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
             thumb_img = work / "img_00.png"
     else:
         thumb_img = work / "img_00.png"
-    make_thumbnail(sb, thumb_img if thumb_img.exists() else None, work / "thumbnail.jpg")
+    try:
+        make_thumbnail(sb, thumb_img if thumb_img.exists() else None, work / "thumbnail.jpg")
+    except subprocess.CalledProcessError as e:
+        print(f"  thumbnail text failed ({e}); using plain first frame")
+        ff("-ss", "1", "-i", str(final), "-frames:v", "1", "-q:v", "3", str(work / "thumbnail.jpg"))
     report["duration"] = round(total, 1)
     return final, report
 
