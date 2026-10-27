@@ -112,6 +112,20 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 | Meta Graph API | Instagram Reels + Facebook Page | free (rate limits: 50 IG posts/day) | 1-2 posts/day | free |
 | X API (Free tier) | posts with the YouTube link | free write tier (check developer.x.com for the current monthly post cap) | ~2 posts/day | free |
 
+### Free AI backups (optional, all free tiers, no card)
+If the main provider is busy or out of free quota, the next one takes over automatically. Add any of these as repository secrets; leave out the ones you don't want.
+
+| Secret | Used for | Where to get it (free) |
+|---|---|---|
+| *(none needed)* | story text via **GitHub Models** | built in: uses the workflow's own GitHub token |
+| `GROQ_API_KEY` | story text (fast Llama) | console.groq.com → API Keys |
+| `OPENROUTER_API_KEY` | story text (only `:free` models) | openrouter.ai → Keys |
+| `HF_TOKEN` | images (FLUX, small monthly free credits) | huggingface.co → Settings → Access Tokens (Read) |
+| `TOGETHER_API_KEY` | images (`FLUX.1-schnell-Free`) | api.together.ai → API Keys |
+| `POLLINATIONS_TOKEN` | images | auth.pollinations.ai |
+
+Order: text = Gemini → GitHub Models → Groq → OpenRouter; images = Cloudflare → Hugging Face → Together → Pollinations → (stock footage if `PIXABAY_API_KEY`/`PEXELS_API_KEY`). Run **Actions → Check free AI providers** to see which ones work.
+
 **Free-only mode is ON by default** (`FREE_ONLY` variable, default `true`): the pipeline never calls Gemini image generation or the Claude API, the only two paths here that can bill. Cloudflare's free plan simply stops for the day at its limit (the video waits for tomorrow, nothing is charged), and GitHub, YouTube and Google sign-in are free. Keep it this way for a guaranteed ₹0.
 
 **What would cost money (only if you turn it on):** enabling billing on the Gemini API key (Gemini images, about $0.04/image ≈ $15-20/month for daily Shorts), Cloudflare Workers Paid ($5/month, only if you want more than ~10k neurons/day, e.g. more videos per day), making the repo **private** (GitHub Free includes 2,000 Actions minutes/month, enough for this; beyond that ~$0.008/min), or `ANTHROPIC_API_KEY` instead of Gemini (~₹1-2/video). Never add a payment method you don't intend to use.

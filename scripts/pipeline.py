@@ -99,7 +99,7 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
     """Never run dry: when few ideas are left, ask the AI for fresh original ones."""
     lines = STORIES.read_text(encoding="utf-8").splitlines()
     left = [l for l in lines if l.strip() and not l.lstrip().startswith("#")]
-    if len(left) >= min_left or not (os.getenv("GEMINI_API_KEY") or (os.getenv("ANTHROPIC_API_KEY") and not FREE_ONLY)):
+    if len(left) >= min_left:
         return
     existing = [l.split("|", 1)[-1].strip()[:90] for l in left]
     if DONE.exists():
@@ -113,8 +113,7 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
         'works) and a quarter "fact" (surprising true fact, must be accurate).',
         existing="\n".join(f"- {e}" for e in existing[-60:]) or "- (none)")
     try:
-        text = ask_gemini(prompt) if os.getenv("GEMINI_API_KEY") else ask_claude(prompt)
-        ideas = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))["ideas"]
+        ideas = json.loads(_strip_fences(ask_ai(prompt)))["ideas"]
     except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
         print(f"  could not refill {STORIES.name}: {e}")
         return
@@ -254,7 +253,7 @@ def ask_gemini(prompt: str) -> str:
         raise SystemExit("No Gemini text model available for this API key.")
     last = ""
     for model in models:
-        for attempt in range(4):
+        for attempt in range(2):  # free backups exist, so don't sit on a busy model
             try:
                 r = requests.post(
                     f"{GEMINI_BASE}/models/{model}:generateContent",
@@ -286,6 +285,73 @@ def ask_gemini(prompt: str) -> str:
     raise SystemExit(f"Gemini failed on all models. Last error {last}")
 
 
+# Free OpenAI-compatible backups for the story text, tried in order when Gemini is busy or
+# out of quota. Each is used only if its key is present; all are free tiers without billing.
+#   GitHub Models: the workflow's own GITHUB_TOKEN (permissions: models: read), no signup
+#   Groq:          GROQ_API_KEY       (console.groq.com, free plan, no card)
+#   OpenRouter:    OPENROUTER_API_KEY (openrouter.ai, only ":free" models are requested)
+FREE_TEXT_PROVIDERS = [
+    ("github-models", "https://models.github.ai/inference/chat/completions", "GITHUB_TOKEN",
+     ["openai/gpt-4.1-mini", "meta/Llama-3.3-70B-Instruct"]),
+    ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY",
+     ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]),
+    ("openrouter", "https://openrouter.ai/api/v1/chat/completions", "OPENROUTER_API_KEY",
+     ["meta-llama/llama-3.3-70b-instruct:free", "deepseek/deepseek-chat-v3-0324:free"]),
+]
+
+
+def _strip_fences(text: str) -> str:
+    return re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+
+
+def ask_openai_compatible(name: str, url: str, key: str, models: list[str], prompt: str) -> str | None:
+    for model in models:
+        if name == "openrouter" and not model.endswith(":free"):
+            continue  # never a paid OpenRouter model
+        try:
+            r = requests.post(url, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                              json={"model": model, "temperature": 0.9, "max_tokens": 8000,
+                                    "response_format": {"type": "json_object"},
+                                    "messages": [{"role": "system", "content": "Reply with valid JSON only."},
+                                                 {"role": "user", "content": prompt}]},
+                              timeout=180)
+        except requests.RequestException as e:
+            print(f"  {name}/{model} error: {e}")
+            continue
+        if r.status_code != 200:
+            print(f"  {name}/{model} -> {r.status_code}: {r.text[:150]}")
+            if r.status_code in (401, 403):
+                return None  # bad/missing permission: skip this provider
+            continue
+        try:
+            text = r.json()["choices"][0]["message"]["content"]
+            json.loads(_strip_fences(text))
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            print(f"  {name}/{model} bad response: {e}")
+            continue
+        print(f"  answer by {name}/{model}")
+        return text
+    return None
+
+
+def ask_ai(prompt: str) -> str:
+    """Story/idea text from the first free provider that answers with valid JSON."""
+    if os.getenv("GEMINI_API_KEY"):
+        try:
+            return ask_gemini(prompt)
+        except SystemExit as e:
+            print(f"  Gemini unavailable ({str(e)[:120]}); trying free backups")
+    for name, url, env, models in FREE_TEXT_PROVIDERS:
+        if os.getenv(env):
+            text = ask_openai_compatible(name, url, os.environ[env], models, prompt)
+            if text:
+                return text
+    if os.getenv("ANTHROPIC_API_KEY") and not FREE_ONLY:
+        return ask_claude(prompt)
+    raise SystemExit("No AI text provider answered. Check GEMINI_API_KEY (or add a free GROQ_API_KEY / "
+                     "OPENROUTER_API_KEY backup).")
+
+
 def ask_claude(prompt: str) -> str:
     import anthropic
     msg = anthropic.Anthropic().messages.create(
@@ -299,13 +365,7 @@ def storyboard(genre: str, idea: str) -> dict:
         start, end = prompt.index("STORY RULES"), prompt.index("VISUAL RULES")
         prompt = (prompt[:start] + FILM_RULES + "\n" + prompt[end:]).replace(
             "YouTube\nShorts channel", "YouTube\nchannel").replace("vertical image", "widescreen 16:9 image")
-    if os.getenv("GEMINI_API_KEY"):
-        text = ask_gemini(prompt)
-    elif os.getenv("ANTHROPIC_API_KEY") and not FREE_ONLY:
-        text = ask_claude(prompt)
-    else:
-        raise SystemExit("Set GEMINI_API_KEY (free tier). Claude needs FREE_ONLY=false (paid API).")
-    sb = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
+    sb = json.loads(_strip_fences(ask_ai(prompt)))
     for s in sb["scenes"]:
         s["seconds"] = max(3.0, min(10.0 if FILM else 7.0, float(s.get("seconds", 4.5))))
         s.setdefault("camera", "zoom_in")
@@ -421,6 +481,68 @@ def gen_image_cloudflare(prompt: str, dest: Path, seed: int) -> bool:
     return True
 
 
+# free image backups (each optional, each stops itself for the run on auth/quota errors)
+_hf_ok = True
+_together_ok = True
+
+
+def _gen_size() -> tuple[int, int]:
+    return (1344, 768) if FILM else (768, 1344)  # FLUX-friendly, upscaled by the edit
+
+
+def gen_image_hf(prompt: str, dest: Path) -> bool:
+    """Hugging Face Inference (HF_TOKEN): free monthly credits, then it just refuses."""
+    global _hf_ok
+    token = os.getenv("HF_TOKEN")
+    if not (_hf_ok and token):
+        return False
+    w, h = _gen_size()
+    try:
+        r = requests.post("https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell",
+                          headers={"Authorization": f"Bearer {token}"},
+                          json={"inputs": prompt[:1500], "parameters": {"width": w, "height": h,
+                                                                       "num_inference_steps": 4}},
+                          timeout=180)
+    except requests.RequestException as e:
+        print(f"    huggingface error: {e}")
+        return False
+    if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
+        dest.write_bytes(r.content)
+        return True
+    print(f"    huggingface {r.status_code}: {r.text[:150]}")
+    if r.status_code in (401, 402, 403, 429):
+        _hf_ok = False
+    return False
+
+
+def gen_image_together(prompt: str, dest: Path) -> bool:
+    """Together AI's free FLUX.1-schnell endpoint (TOGETHER_API_KEY); only the -Free model."""
+    global _together_ok
+    key = os.getenv("TOGETHER_API_KEY")
+    if not (_together_ok and key):
+        return False
+    w, h = _gen_size()
+    try:
+        r = requests.post("https://api.together.xyz/v1/images/generations",
+                          headers={"Authorization": f"Bearer {key}"},
+                          json={"model": "black-forest-labs/FLUX.1-schnell-Free", "prompt": prompt[:1500],
+                                "width": w, "height": h, "steps": 4, "n": 1, "response_format": "b64_json"},
+                          timeout=180)
+    except requests.RequestException as e:
+        print(f"    together error: {e}")
+        return False
+    if r.status_code == 200:
+        try:
+            dest.write_bytes(base64.b64decode(r.json()["data"][0]["b64_json"]))
+            return True
+        except (KeyError, IndexError, ValueError):
+            pass
+    print(f"    together {r.status_code}: {r.text[:150]}")
+    if r.status_code in (401, 402, 403, 404, 429):
+        _together_ok = False
+    return False
+
+
 _poll_ok = True
 
 
@@ -455,6 +577,10 @@ def gen_image(prompt: str, dest: Path, seed: int) -> str | None:
         return "gemini"
     if gen_image_cloudflare(prompt, dest, seed):
         return "cloudflare"
+    if gen_image_hf(prompt, dest):
+        return "huggingface"
+    if gen_image_together(prompt, dest):
+        return "together"
     if gen_image_pollinations(prompt, dest, seed):
         time.sleep(3)  # be polite to the free endpoint
         return "pollinations"
