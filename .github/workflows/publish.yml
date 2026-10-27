@@ -35,10 +35,15 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
+          # man-db triggers can stall dpkg for many minutes on hosted runners
+          echo "set man-db/auto-update false" | sudo debconf-communicate >/dev/null 2>&1 || true
+          sudo rm -f /var/lib/man-db/auto-update
           APT="sudo -E apt-get -o DPkg::Lock::Timeout=120 -o Acquire::Retries=3 -y -qq --no-install-recommends"
-          for i in 1 2 3; do
+          PKGS="ffmpeg fonts-noto-core fonts-dejavu-core"
+          # the runner's package index is usually fresh enough; only update if install fails
+          timeout 300 $APT install $PKGS || for i in 1 2 3; do
             timeout 240 sudo -E apt-get -o Acquire::Retries=3 update -qq && \
-            timeout 300 $APT install ffmpeg fonts-noto-core fonts-dejavu-core && break
+            timeout 300 $APT install $PKGS && break
             echo "apt attempt $i failed, retrying"; sleep 10
           done
           ffmpeg -hide_banner -filters | grep -q " ass " && echo "ffmpeg ready"
