@@ -30,22 +30,33 @@ jobs:
           cache: pip
 
       - name: Install ffmpeg + fonts
-        timeout-minutes: 10
+        timeout-minutes: 8
         env:
           DEBIAN_FRONTEND: noninteractive
-          NEEDRESTART_MODE: a
         run: |
-          # man-db triggers can stall dpkg for many minutes on hosted runners
-          echo "set man-db/auto-update false" | sudo debconf-communicate >/dev/null 2>&1 || true
-          sudo rm -f /var/lib/man-db/auto-update
-          APT="sudo -E apt-get -o DPkg::Lock::Timeout=120 -o Acquire::Retries=3 -y -qq --no-install-recommends"
-          PKGS="ffmpeg fonts-noto-core fonts-dejavu-core"
-          # the runner's package index is usually fresh enough; only update if install fails
-          timeout 300 $APT install $PKGS || for i in 1 2 3; do
-            timeout 240 sudo -E apt-get -o Acquire::Retries=3 update -qq && \
-            timeout 300 $APT install $PKGS && break
-            echo "apt attempt $i failed, retrying"; sleep 10
+          # apt on hosted runners sometimes hangs for 10+ min, so prefer a static build
+          FONTS="$HOME/fonts"; mkdir -p "$FONTS" "$HOME/ffmpeg"
+          if curl -fsSL --retry 3 --max-time 180 \
+               https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz \
+             | tar -xJ --strip-components=1 -C "$HOME/ffmpeg"; then
+            echo "$HOME/ffmpeg/bin" >> "$GITHUB_PATH"; export PATH="$HOME/ffmpeg/bin:$PATH"
+          else
+            echo "static ffmpeg download failed, falling back to apt"
+            sudo rm -f /var/lib/man-db/auto-update
+            timeout 300 sudo -E apt-get -o DPkg::Lock::Timeout=60 -y -qq --no-install-recommends install ffmpeg \
+              || { timeout 180 sudo apt-get update -qq; timeout 300 sudo -E apt-get -y -qq --no-install-recommends install ffmpeg; }
+          fi
+          for f in Regular Bold; do
+            curl -fsSL --retry 3 --max-time 60 -o "$FONTS/NotoSans-$f.ttf" \
+              "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSans/hinted/ttf/NotoSans-$f.ttf" \
+              || rm -f "$FONTS/NotoSans-$f.ttf"
           done
+          cp /usr/share/fonts/truetype/dejavu/DejaVuSans*.ttf "$FONTS/" 2>/dev/null || true
+          if [ ! -s "$FONTS/NotoSans-Bold.ttf" ]; then
+            echo "Noto Sans unavailable, captions use DejaVu Sans"; echo "CAPTION_FONT=DejaVu Sans" >> "$GITHUB_ENV"
+          fi
+          echo "FONTS_DIR=$FONTS" >> "$GITHUB_ENV"
+          ls "$FONTS"
           ffmpeg -hide_banner -filters | grep -q " ass " && echo "ffmpeg ready"
 
       - name: Install Python deps

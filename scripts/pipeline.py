@@ -38,6 +38,7 @@ OUT = ROOT / "out"
 W, H, FPS = 1080, 1920, 30
 XF = 0.5  # crossfade seconds
 FONT = os.getenv("CAPTION_FONT", "Noto Sans")
+FONTS_DIR = os.getenv("FONTS_DIR", "")  # extra fonts folder (static ffmpeg can't rely on system fontconfig)
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")  # empty = auto-pick newest
 GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "")  # empty = auto-pick newest
@@ -419,6 +420,11 @@ LOOK = "eq=contrast=1.06:saturation=1.03,vignette=PI/5,noise=alls=3:allf=t"
 
 
 def font_file(bold: bool = True) -> str:
+    if FONTS_DIR:
+        name = FONT.replace(" ", "")
+        for cand in (f"{name}-{'Bold' if bold else 'Regular'}.ttf", f"{name}{'-Bold' if bold else ''}.ttf"):
+            if (Path(FONTS_DIR) / cand).exists():
+                return str(Path(FONTS_DIR) / cand)
     try:
         out = subprocess.run(["fc-match", "-f", "%{file}", f"{FONT}:{'bold' if bold else 'regular'}"],
                              capture_output=True, text=True, check=True).stdout.strip()
@@ -634,7 +640,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
 
     final = work / "short.mp4"
-    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}", *ENC,
+    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}" + (f":fontsdir={FONTS_DIR}" if FONTS_DIR else ""), *ENC,
        "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(final))
 
     thumb_img = work / "thumb_src.png"
