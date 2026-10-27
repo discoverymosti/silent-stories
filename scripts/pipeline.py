@@ -287,14 +287,9 @@ def ask_gemini(prompt: str) -> str:
 
 # Free OpenAI-compatible backups for the story text, tried in order when Gemini is busy or
 # out of quota. Each is used only if its key is present; all are free tiers without billing.
-#   GitHub Models: the workflow's own GITHUB_TOKEN (permissions: models: read), no signup
 #   Groq:          GROQ_API_KEY       (console.groq.com, free plan, no card)
 #   OpenRouter:    OPENROUTER_API_KEY (openrouter.ai, only ":free" models are requested)
 FREE_TEXT_PROVIDERS = [
-    ("github-models", "https://models.github.ai/inference/chat/completions", "GITHUB_TOKEN",
-     ["openai/gpt-4.1-mini", "meta/Llama-3.3-70B-Instruct"]),
-    ("github-models-azure", "https://models.inference.ai.azure.com/chat/completions", "GITHUB_TOKEN",
-     ["gpt-4o-mini", "Meta-Llama-3.1-70B-Instruct"]),
     ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY",
      ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]),
     ("openrouter", "https://openrouter.ai/api/v1/chat/completions", "OPENROUTER_API_KEY",
@@ -311,10 +306,7 @@ def ask_openai_compatible(name: str, url: str, key: str, models: list[str], prom
         if name == "openrouter" and not model.endswith(":free"):
             continue  # never a paid OpenRouter model
         try:
-            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-            if name.startswith("github"):
-                headers |= {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-            r = requests.post(url, headers=headers,
+            r = requests.post(url, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                               json={"model": model, "temperature": 0.9, "max_tokens": 8000,
                                     "response_format": {"type": "json_object"},
                                     "messages": [{"role": "system", "content": "Reply with valid JSON only."},

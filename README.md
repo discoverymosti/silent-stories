@@ -117,14 +117,13 @@ If the main provider is busy or out of free quota, the next one takes over autom
 
 | Secret | Used for | Where to get it (free) |
 |---|---|---|
-| *(none needed)* | story text via **GitHub Models** | built in: uses the workflow's own GitHub token |
 | `GROQ_API_KEY` | story text (fast Llama) | console.groq.com → API Keys |
 | `OPENROUTER_API_KEY` | story text (only `:free` models) | openrouter.ai → Keys |
 | `HF_TOKEN` | images (FLUX, small monthly free credits) | huggingface.co → Settings → Access Tokens (Read) |
 | `TOGETHER_API_KEY` | images (`FLUX.1-schnell-Free`) | api.together.ai → API Keys |
 | `POLLINATIONS_TOKEN` | images | auth.pollinations.ai |
 
-Order: text = Gemini → GitHub Models → Groq → OpenRouter; images = Cloudflare → Hugging Face → Together → Pollinations → (stock footage if `PIXABAY_API_KEY`/`PEXELS_API_KEY`). Run **Actions → Check free AI providers** to see which ones work.
+Order: text = Gemini → Groq → OpenRouter; images = Cloudflare → Hugging Face → Together → Pollinations → (stock footage if `PIXABAY_API_KEY`/`PEXELS_API_KEY`). Run **Actions → Check free AI providers** to see which ones work.
 
 **Free-only mode is ON by default** (`FREE_ONLY` variable, default `true`): the pipeline never calls Gemini image generation or the Claude API, the only two paths here that can bill. Cloudflare's free plan simply stops for the day at its limit (the video waits for tomorrow, nothing is charged), and GitHub, YouTube and Google sign-in are free. Keep it this way for a guaranteed ₹0.
 
