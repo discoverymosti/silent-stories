@@ -91,6 +91,7 @@ jobs:
           CHANNEL_HASHTAG: ${{ vars.CHANNEL_HASHTAG || '#DiscoveryMosti' }}
           VIDEO_FORMAT: ${{ (github.event.schedule == '10 16 * * 0' && 'film') || inputs.format || 'short' }}
           WATERMARK: ${{ vars.WATERMARK || 'DiscoveryMosti' }}
+          FREE_ONLY: ${{ vars.FREE_ONLY || 'true' }}
           SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_upload || 'false' }}
         run: python scripts/pipeline.py
 

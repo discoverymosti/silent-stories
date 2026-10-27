@@ -55,6 +55,9 @@ CHANNEL_NAME = os.getenv("CHANNEL_NAME", "DiscoveryMosti")
 # refuse to upload if more than this many scenes ended up as plain gradient filler
 MAX_FALLBACK = int(os.getenv("MAX_FALLBACK_SCENES", "4" if FILM else "2"))
 WATERMARK = os.getenv("WATERMARK", CHANNEL_NAME)
+# FREE_ONLY (default) = never call anything that can bill: no Gemini image generation (paid-only
+# for most keys, and billed if billing is ever enabled) and no Claude API. Set FREE_ONLY=false to allow.
+FREE_ONLY = os.getenv("FREE_ONLY", "true").lower() != "false"
 
 NO_TEXT = ("No text, no letters, no captions, no logos, no watermark, no brand names, "
            "no real celebrities, no copyrighted characters.")
@@ -96,7 +99,7 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
     """Never run dry: when few ideas are left, ask the AI for fresh original ones."""
     lines = STORIES.read_text(encoding="utf-8").splitlines()
     left = [l for l in lines if l.strip() and not l.lstrip().startswith("#")]
-    if len(left) >= min_left or not (os.getenv("GEMINI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")):
+    if len(left) >= min_left or not (os.getenv("GEMINI_API_KEY") or (os.getenv("ANTHROPIC_API_KEY") and not FREE_ONLY)):
         return
     existing = [l.split("|", 1)[-1].strip()[:90] for l in left]
     if DONE.exists():
@@ -298,10 +301,10 @@ def storyboard(genre: str, idea: str) -> dict:
             "YouTube\nShorts channel", "YouTube\nchannel").replace("vertical image", "widescreen 16:9 image")
     if os.getenv("GEMINI_API_KEY"):
         text = ask_gemini(prompt)
-    elif os.getenv("ANTHROPIC_API_KEY"):
+    elif os.getenv("ANTHROPIC_API_KEY") and not FREE_ONLY:
         text = ask_claude(prompt)
     else:
-        raise SystemExit("Set GEMINI_API_KEY or ANTHROPIC_API_KEY.")
+        raise SystemExit("Set GEMINI_API_KEY (free tier). Claude needs FREE_ONLY=false (paid API).")
     sb = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
     for s in sb["scenes"]:
         s["seconds"] = max(3.0, min(10.0 if FILM else 7.0, float(s.get("seconds", 4.5))))
@@ -354,7 +357,7 @@ def full_prompt(sb: dict, scene: dict | str) -> str:
 
 def gen_image_gemini(prompt: str, dest: Path) -> bool:
     global _gemini_img_ok
-    if not (_gemini_img_ok and os.getenv("GEMINI_API_KEY")):
+    if FREE_ONLY or not (_gemini_img_ok and os.getenv("GEMINI_API_KEY")):
         return False
     model = pick_gemini_model("image")
     if not model:
