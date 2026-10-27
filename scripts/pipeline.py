@@ -82,6 +82,46 @@ def mark_done(idea: str, video_id: str | None) -> None:
         f.write(f"{idea} | {(base + video_id) if video_id else 'not uploaded'}\n")
 
 
+REFILL_PROMPT = """You plan content for "{channel}", a worldwide YouTube channel of SILENT stories:
+no voiceover, no dialogue, only cinematic images, short captions and music.
+Write {n} NEW, original {kind} ideas for a global audience (any country; universal emotions).
+Each idea: one sentence with a clear character, situation and emotional or surprising payoff.
+{genres}
+Do not repeat or closely resemble any of these existing ideas:
+{existing}
+Return ONLY JSON: {{"ideas": [{{"genre": str, "idea": str}}]}}"""
+
+
+def refill_queue(min_left: int = 2 if FILM else 5) -> None:
+    """Never run dry: when few ideas are left, ask the AI for fresh original ones."""
+    lines = STORIES.read_text(encoding="utf-8").splitlines()
+    left = [l for l in lines if l.strip() and not l.lstrip().startswith("#")]
+    if len(left) >= min_left or not (os.getenv("GEMINI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")):
+        return
+    existing = [l.split("|", 1)[-1].strip()[:90] for l in left]
+    if DONE.exists():
+        existing += [l.split("|")[0].strip()[:90] for l in DONE.read_text(encoding="utf-8").splitlines() if l.strip()]
+    n = 4 if FILM else 10
+    prompt = REFILL_PROMPT.format(
+        channel=CHANNEL_NAME, n=n,
+        kind="three-act short-film (about 3 minutes)" if FILM else "YouTube Shorts (about 50 seconds)",
+        genres='genre is always "story".' if FILM else
+        'Mix genres: about half "story" (emotional micro-drama), a quarter "explainer" (how something '
+        'works) and a quarter "fact" (surprising true fact, must be accurate).',
+        existing="\n".join(f"- {e}" for e in existing[-60:]) or "- (none)")
+    try:
+        text = ask_gemini(prompt) if os.getenv("GEMINI_API_KEY") else ask_claude(prompt)
+        ideas = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))["ideas"]
+    except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
+        print(f"  could not refill {STORIES.name}: {e}")
+        return
+    new = [f"{(i.get('genre') or 'story').strip().lower()} | {' '.join(str(i['idea']).split())}"
+           for i in ideas if isinstance(i, dict) and i.get("idea")]
+    if new:
+        STORIES.write_text("\n".join(lines).rstrip() + "\n" + "\n".join(new) + "\n", encoding="utf-8")
+        print(f"  added {len(new)} fresh ideas to {STORIES.name}")
+
+
 # ================================================================ storyboard + SEO
 
 STORYBOARD_PROMPT = """You are the director and growth marketer of "{channel}", a YouTube
@@ -229,7 +269,7 @@ def ask_gemini(prompt: str) -> str:
                     parts = r.json()["candidates"][0]["content"]["parts"]
                     text = "".join(p.get("text", "") for p in parts)
                     json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
-                    print(f"  storyboard by {model}")
+                    print(f"  answer by {model}")
                     return text
                 except (KeyError, IndexError, ValueError) as e:
                     last = f"bad response: {e}"
@@ -584,7 +624,8 @@ def ass_escape(text: str) -> str:
 
 
 def write_captions(scenes: list[dict], starts: list[float], ending: str,
-                   end_start: float, end_len: float, dest: Path) -> None:
+                   end_start: float, end_len: float, dest: Path, title: str = "",
+                   title_len: float = 0.0) -> None:
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -595,12 +636,18 @@ WrapStyle: 0
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,{FONT},{64 if FILM else 78},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,5,3,2,90,90,{90 if FILM else 520},1
 Style: End,{FONT},92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,0,0,5,110,110,0,1
+Style: Title,{FONT},96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,0,0,5,160,160,0,1
 Style: Tag,{FONT},44,&H00B4B4B4,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4,0,1,0,0,2,90,90,{220 if FILM else 300},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = []
+    if title:  # film opening card: title, then the channel credit
+        lines.append(f"Dialogue: 0,{ass_time(0.4)},{ass_time(title_len - 0.2)},Title,,0,0,0,,"
+                     f"{{\\fad(700,500)}}{ass_escape(title)}")
+        lines.append(f"Dialogue: 0,{ass_time(1.1)},{ass_time(title_len - 0.2)},Tag,,0,0,0,,"
+                     f"{{\\fad(700,500)}}{ass_escape(('a ' + CHANNEL_NAME + ' silent film').upper())}")
     for s, t in zip(scenes, starts):
         cap = ass_escape(s.get("caption", "").strip())
         if cap:
@@ -703,6 +750,12 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     parts, lengths, report = [], [], {"ai": 0, "stock": 0, "fallback": 0}
     base_seed = random.randint(1, 10_000_000)
     set_grade(sb.get("grade", "teal_orange"))
+    intro_len = 3.5 + XF if FILM else 0.0
+    if FILM:
+        intro = work / "intro.mp4"
+        end_card(intro_len, intro)
+        parts.append(intro)
+        lengths.append(intro_len)
     for i, s in enumerate(sb["scenes"]):
         L = s["seconds"] + XF  # extra overlap for crossfade
         part = work / f"scene_{i:02d}.mp4"
@@ -736,7 +789,9 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     starts = crossfade_all(parts, lengths, joined)
     total = starts[-1] + lengths[-1]
     subs = work / "captions.ass"
-    write_captions(sb["scenes"], starts, sb["ending"], starts[-1], lengths[-1], subs)
+    scene_starts = starts[1:] if FILM else starts
+    write_captions(sb["scenes"], scene_starts, sb["ending"], starts[-1], lengths[-1], subs,
+                   title=sb["title"] if FILM else "", title_len=intro_len)
     music = work / "music.m4a"
     report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
 
@@ -867,6 +922,7 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
 # ================================================================ main
 
 def main() -> int:
+    refill_queue()
     item = next_story()
     if not item:
         print(f"{STORIES.name} is empty - add more ideas.")

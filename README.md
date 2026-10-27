@@ -6,7 +6,7 @@ Automated YouTube Shorts channel. **No voice, no language barrier**: stories tol
 stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI images per scene (Gemini → Cloudflare FLUX → Pollinations,
                                                stock footage fallback)
            ─► auto-edit: Ken Burns moves, crossfades, film look, captions, original music
-           ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (daily 14:40 UTC)
+           ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (2 a day: 01:40 and 14:40 UTC)
 ```
 
 ## One-time setup (≈25 min)
@@ -55,7 +55,7 @@ Run one now: **Actions → Silent Stories - Publish Short → Run workflow → f
 Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on Shorts, clear of the Shorts buttons; bottom-right on films). Change it with the `WATERMARK` variable (empty = none). For YouTube's clickable *subscribe* watermark, also upload your logo in YouTube Studio → Customisation → Branding → Video watermark.
 
 ## Daily use
-- **Add ideas** to `stories.txt` (`genre | idea`), editing it on github.com works fine. Each upload removes the top line and logs the link in `done.txt`.
+- **Ideas refill themselves:** when `stories.txt` drops below 5 ideas (or `films.txt` below 2), the AI adds fresh original ones that don't repeat past videos. You can still **add your own** (`genre | idea`), editing on github.com works fine. Each upload removes the top line and logs the link in `done.txt`.
 - **Better music:** drop royalty-free mp3s in `music/` (see `music/README.md`). Without them, a generated ambient pad is used.
 - **Change schedule:** edit the `cron` line in `.github/workflows/publish.yml` (times are UTC; `40 14` = 14:40 UTC, `10 16 * * 0` = Sunday film).
 
@@ -81,9 +81,9 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 ## Monthly cost: ₹0 / $0 with the current setup
 | Service | Used for | Free allowance | This channel uses | Cost |
 |---|---|---|---|---|
-| GitHub Actions | rendering + uploading | unlimited minutes on a **public** repo | ~10 min/day + ~40 min/week | free |
+| GitHub Actions | rendering + uploading | unlimited minutes on a **public** repo | ~20 min/day + ~40 min/week | free |
 | Gemini API (AI Studio, free tier) | storyboard, SEO title/description/tags | free-tier daily request limits | 1 request/video | free |
-| Cloudflare Workers AI (FLUX) | AI images | 10,000 neurons/day | ~12 images/Short, ~32/film: well under the limit | free |
+| Cloudflare Workers AI (FLUX) | AI images | 10,000 neurons/day | ~12 images/Short x2, ~32/film: under the limit | free |
 | YouTube Data API | upload + thumbnail | 10,000 quota units/day | ~1,650 units/video | free |
 | Google Cloud project (OAuth) | sign-in for uploads | free, no billing account needed | n/a | free |
 | Music | original synthesized score | n/a | n/a | free |

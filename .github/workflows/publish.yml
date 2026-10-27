@@ -4,6 +4,7 @@ on:
   schedule:
     # times are UTC, chosen for a worldwide audience (evening in Asia/Europe, morning/noon in the Americas)
     - cron: "40 14 * * *"   # every day 14:40 UTC: vertical Short (20:10 IST, 15:40 CET, 10:40 New York)
+    - cron: "40 1 * * *"    # every day 01:40 UTC: 2nd Short (07:10 IST, 09:40 Manila, 21:40 New York)
     - cron: "10 16 * * 0"   # every Sunday 16:10 UTC: weekly widescreen short film (12:10 New York)
   workflow_dispatch:
     inputs:
