@@ -3,10 +3,10 @@
 Automated YouTube Shorts channel. **No voice, no language barrier**: stories told with footage, short captions and music, so they work worldwide.
 
 ```
-stories.txt ─► Gemini storyboard ─► Pixabay/Pexels footage ─► ffmpeg 1080×1920
-           (scenes, captions, mood)                         (fades, animated captions,
-                                                             ambient music, end card)
-                                                ─► YouTube Short (daily, 18:00 IST)
+stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI images per scene (Gemini → Pollinations,
+                                               stock footage fallback)
+           ─► auto-edit: Ken Burns moves, crossfades, film look, captions, original music
+           ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (daily 18:00 IST)
 ```
 
 ## One-time setup (≈25 min)
@@ -18,7 +18,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 |---|---|---|
 | `GEMINI_API_KEY` | aistudio.google.com → Get API key | free tier |
 | `ANTHROPIC_API_KEY` *(optional, instead of Gemini)* | console.anthropic.com → API Keys | ~₹1–2 per video |
-| `PIXABAY_API_KEY` | pixabay.com/api/docs (sign in, key is shown on the page) | free |
+| `PIXABAY_API_KEY` *(optional fallback)* | pixabay.com/api/docs (sign in, key is shown on the page) | free |
 | `PEXELS_API_KEY` *(optional extra source)* | pexels.com/api | free |
 | `YT_CLIENT_ID` / `YT_CLIENT_SECRET` / `YT_REFRESH_TOKEN` | step 2 | free |
 
@@ -48,8 +48,16 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 |---|---|
 | `YT_PRIVACY` | `private` |
 | `GEMINI_MODEL` | `gemini-2.5-flash` |
+| `GEMINI_IMAGE_MODEL` | `gemini-2.5-flash-image` |
+| `VISUAL_MODE` | `ai` (original AI images) or `stock` (Pixabay/Pexels) |
 | `CHANNEL_NAME` | `Silent Stories` (shown on end card) |
 | `CHANNEL_HASHTAG` | `#SilentStories` |
+
+## Copyright-safe by design
+- Visuals: original AI images (Gemini / Pollinations FLUX), no stock or third-party clips unless AI fails.
+- Music: synthesized in the pipeline (original), or your own royalty-free files in `music/`.
+- AI disclosure: uploads set *altered or synthetic content* when AI visuals are used, as YouTube requires.
+- Custom thumbnails need a phone-verified channel: youtube.com/verify
 
 ## Good to know
 - **Unverified API project:** YouTube may lock API uploads to *private* until your Google Cloud project passes the [YouTube API audit](https://support.google.com/youtube/contact/yt_api_form). Until then, flip each video to public in YouTube Studio (one click), or submit the audit form.

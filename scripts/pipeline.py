@@ -1,23 +1,31 @@
 """
-Silent Stories -> YouTube Shorts pipeline.
+Silent Stories -> YouTube Shorts pipeline (fully automatic, copyright-safe).
 
-No voiceover. Visuals + animated captions + music only, so it works in every language.
+No voiceover. Original AI visuals + animated captions + original music, so it works
+in every language and contains no third-party copyrighted material.
 
 1. Take the next idea from stories.txt
-2. Gemini (or Claude) writes a storyboard (scenes, captions, music mood, title, tags)
-3. Pixabay / Pexels supply stock footage for each scene
-4. ffmpeg builds a 1080x1920 video with fades, captions and an ambient soundtrack
-5. YouTube Data API uploads it as a Short
+2. Gemini (or Claude) writes the storyboard + SEO/SMO metadata
+3. Each scene gets an ORIGINAL AI image (Gemini image -> Pollinations fallback),
+   or stock footage (Pixabay/Pexels) if VISUAL_MODE=stock or AI fails
+4. Auto-edit: Ken Burns camera moves, crossfades, film look, animated captions,
+   end card, synthesized music (original, no copyright)
+5. AI thumbnail with title text
+6. Upload to YouTube as a Short with SEO title/description/hashtags/tags + thumbnail
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 
@@ -28,15 +36,22 @@ MUSIC_DIR = ROOT / "music"
 OUT = ROOT / "out"
 
 W, H, FPS = 1080, 1920, 30
+XF = 0.5  # crossfade seconds
 FONT = os.getenv("CAPTION_FONT", "Noto Sans")
-MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
+VISUAL_MODE = os.getenv("VISUAL_MODE", "ai").lower()  # ai | stock
 PRIVACY = os.getenv("YT_PRIVACY", "private")
 SKIP_UPLOAD = os.getenv("SKIP_UPLOAD", "false").lower() == "true"
 CHANNEL_TAG = os.getenv("CHANNEL_HASHTAG", "#SilentStories")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME", "Silent Stories")
 
+NO_TEXT = ("No text, no letters, no captions, no logos, no watermark, no brand names, "
+           "no real celebrities, no copyrighted characters.")
 
-# ---------------------------------------------------------------- queue
+
+# ================================================================ queue
 
 def next_story() -> tuple[str, str] | None:
     for line in STORIES.read_text(encoding="utf-8").splitlines():
@@ -51,51 +66,69 @@ def next_story() -> tuple[str, str] | None:
 
 
 def mark_done(idea: str, video_id: str | None) -> None:
-    kept = [l for l in STORIES.read_text(encoding="utf-8").splitlines()
-            if idea not in l]
+    kept = [l for l in STORIES.read_text(encoding="utf-8").splitlines() if idea not in l]
     STORIES.write_text("\n".join(kept).rstrip() + "\n", encoding="utf-8")
     with DONE.open("a", encoding="utf-8") as f:
-        f.write(f"{idea} | {('https://youtu.be/' + video_id) if video_id else 'not uploaded'}\n")
+        f.write(f"{idea} | {('https://youtube.com/shorts/' + video_id) if video_id else 'not uploaded'}\n")
 
 
-# ---------------------------------------------------------------- storyboard
+# ================================================================ storyboard + SEO
 
-STORYBOARD_PROMPT = """You are the director of "Silent Stories", a YouTube Shorts channel.
-Videos have NO voiceover and NO dialogue. They tell a story only through stock footage,
-very short on-screen captions and music, so anyone in any country can follow them.
+STORYBOARD_PROMPT = """You are the director and growth marketer of "Silent Stories", a YouTube
+Shorts channel. Videos have NO voiceover and NO dialogue: they tell a story only through
+cinematic images, very short on-screen captions and music, so anyone in any country can follow.
 
-Genre: {genre}   ("story" = emotional micro-drama, "explainer" = how something works,
-                  "fact" = surprising true fact told visually)
+Genre: {genre}   ("story" = emotional micro-drama / short film, "explainer" = how something
+                  works, "fact" = surprising true fact told visually)
 Idea: {idea}
 
-Rules:
-- 9 to 12 scenes, total 45-55 seconds. Each scene 3-6 seconds.
-- Scene 1 is the hook: an intriguing image + a caption that creates a question.
-- Captions: at most 7 simple words, present tense, no emojis. Some scenes should have
-  an empty caption ("") to create silent beats.
-- Every "query" is a concrete Pexels stock-video search of 2-4 English words describing
-  something a camera can film (e.g. "crowded city bus", "old man hands", "rain on window").
-  No named people, brands, or fantasy elements. Reuse a query only if the story needs it.
-- "ending" is a short, shareable closing line (max 8 words) shown on a dark card.
-- "music_mood" is one of: warm, sad, tense, curious, uplifting.
-- Title: under 60 characters, curiosity-driven, no clickbait lies. No hashtags in title.
+STORY RULES
+- 9 to 11 scenes, total 45-55 seconds, each scene 3.5-6 seconds.
+- Scene 1 is the HOOK: the most striking image + a caption that creates a question.
+- Clear arc: hook -> build -> turn -> emotional payoff.
+- Captions: max 7 simple words, present tense, no emojis. 2-3 scenes have "" (silent beats).
+- "ending": shareable closing line, max 8 words.
+- "music_mood": one of warm, sad, tense, curious, uplifting.
 
-Return ONLY valid JSON:
-{{"title": str, "description": str (2 short sentences), "tags": [8-12 str],
-  "music_mood": str, "ending": str,
-  "scenes": [{{"query": str, "caption": str, "seconds": number}}]}}"""
+VISUAL RULES (images are AI-generated, must stay consistent)
+- "style": one visual style for the whole film (e.g. "cinematic film still, soft golden
+  light, shallow depth of field, 35mm, muted teal-orange grade").
+- "characters": short fixed description of each recurring character (age, clothes, hair)
+  so every scene shows the SAME people. Use "" if none.
+- each scene "image_prompt": one vivid, concrete, filmable shot (subject, action, setting,
+  framing such as close-up / wide shot). Original people only, no celebrities, brands,
+  logos, readable text, or copyrighted characters.
+- each scene "camera": one of zoom_in, zoom_out, pan_left, pan_right, pan_up.
+- each scene "query": 2-4 word stock-video search fallback (e.g. "rain on window").
+
+SEO / SMO RULES
+- "title": max 60 chars, main search keyword in the first 4 words, emotional curiosity,
+  honest (no clickbait lies), no hashtags, no ALL CAPS.
+- "description": 4-6 short lines: line 1 is a hook (max 100 chars) containing the main
+  keyword; then 2-3 lines summarising the story naturally with related keywords; last line
+  invites viewers to subscribe for more silent stories. No hashtags here.
+- "hashtags": 3-5 hashtags, most relevant first (do not include #Shorts).
+- "tags": 12-15 search keywords/phrases people actually type, broad to specific.
+- "social_caption": an Instagram/Facebook caption (2-3 lines + 8-10 hashtags + 1 emoji max).
+- "thumbnail_prompt": the single most eye-catching vertical image for this story,
+  same style and characters, strong emotion, clean background space at the top.
+- "thumbnail_text": 2-4 words, punchy, uppercase.
+
+Return ONLY valid JSON with exactly these keys:
+{{"title": str, "description": str, "hashtags": [str], "tags": [str],
+  "social_caption": str, "thumbnail_prompt": str, "thumbnail_text": str,
+  "style": str, "characters": str, "music_mood": str, "ending": str,
+  "scenes": [{{"image_prompt": str, "camera": str, "query": str,
+               "caption": str, "seconds": number}}]}}"""
 
 
 def ask_gemini(prompt: str) -> str:
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     r = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
         headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
-        json={
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.9},
-        },
-        timeout=120,
+        json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+              "generationConfig": {"responseMimeType": "application/json", "temperature": 0.9}},
+        timeout=180,
     )
     if r.status_code != 200:
         raise SystemExit(f"Gemini error {r.status_code}: {r.text[:500]}")
@@ -106,9 +139,7 @@ def ask_gemini(prompt: str) -> str:
 def ask_claude(prompt: str) -> str:
     import anthropic
     msg = anthropic.Anthropic().messages.create(
-        model=MODEL, max_tokens=2500,
-        messages=[{"role": "user", "content": prompt}],
-    )
+        model=CLAUDE_MODEL, max_tokens=4000, messages=[{"role": "user", "content": prompt}])
     return msg.content[0].text
 
 
@@ -120,39 +151,104 @@ def storyboard(genre: str, idea: str) -> dict:
         text = ask_claude(prompt)
     else:
         raise SystemExit("Set GEMINI_API_KEY or ANTHROPIC_API_KEY.")
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-    sb = json.loads(text)
+    sb = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
     for s in sb["scenes"]:
-        s["seconds"] = max(2.5, min(7.0, float(s["seconds"])))
+        s["seconds"] = max(3.0, min(7.0, float(s.get("seconds", 4.5))))
+        s.setdefault("camera", "zoom_in")
+        s.setdefault("query", s.get("image_prompt", "")[:40])
+        s.setdefault("caption", "")
+    sb.setdefault("style", "cinematic film still, soft natural light, 35mm, shallow depth of field")
+    sb.setdefault("characters", "")
+    sb.setdefault("hashtags", [])
+    sb.setdefault("tags", [])
     return sb
 
 
-# ---------------------------------------------------------------- footage
+# ================================================================ AI images
+
+_gemini_img_ok = True
+
+
+def full_prompt(sb: dict, shot: str) -> str:
+    chars = f" Characters: {sb['characters']}." if sb.get("characters") else ""
+    return f"{shot}.{chars} Style: {sb['style']}. Vertical 9:16 photo. {NO_TEXT}"
+
+
+def gen_image_gemini(prompt: str, dest: Path) -> bool:
+    global _gemini_img_ok
+    if not (_gemini_img_ok and os.getenv("GEMINI_API_KEY")):
+        return False
+    try:
+        r = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_IMAGE_MODEL}:generateContent",
+            headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
+            json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                  "generationConfig": {"responseModalities": ["IMAGE"],
+                                       "imageConfig": {"aspectRatio": "9:16"}}},
+            timeout=180,
+        )
+    except requests.RequestException as e:
+        print(f"    gemini-image error: {e}")
+        return False
+    if r.status_code != 200:
+        print(f"    gemini-image {r.status_code}: {r.text[:200]}")
+        if r.status_code in (400, 403, 404, 429):
+            _gemini_img_ok = False  # quota/model unavailable: stop trying this run
+        return False
+    for cand in r.json().get("candidates", []):
+        for part in cand.get("content", {}).get("parts", []):
+            data = (part.get("inlineData") or part.get("inline_data") or {}).get("data")
+            if data:
+                dest.write_bytes(base64.b64decode(data))
+                return True
+    return False
+
+
+def gen_image_pollinations(prompt: str, dest: Path, seed: int) -> bool:
+    url = (f"https://image.pollinations.ai/prompt/{quote(prompt[:900])}"
+           f"?width={W}&height={H}&seed={seed}&nologo=true&model=flux")
+    for attempt in range(3):
+        try:
+            r = requests.get(url, timeout=180)
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
+                dest.write_bytes(r.content)
+                return True
+            print(f"    pollinations {r.status_code}")
+        except requests.RequestException as e:
+            print(f"    pollinations error: {e}")
+        time.sleep(6 * (attempt + 1))
+    return False
+
+
+def gen_image(prompt: str, dest: Path, seed: int) -> str | None:
+    if dest.exists():
+        return "cached"
+    if gen_image_gemini(prompt, dest):
+        return "gemini"
+    if gen_image_pollinations(prompt, dest, seed):
+        time.sleep(3)  # be polite to the free endpoint
+        return "pollinations"
+    return None
+
+
+# ================================================================ stock footage (fallback)
 
 def pexels_search(query: str, used: set[int]) -> str | None:
     key = os.getenv("PEXELS_API_KEY")
     if not key:
         return None
-    r = requests.get(
-        "https://api.pexels.com/videos/search",
-        headers={"Authorization": key},
-        params={"query": query, "orientation": "portrait", "per_page": 15, "size": "medium"},
-        timeout=30,
-    )
+    r = requests.get("https://api.pexels.com/videos/search", headers={"Authorization": key},
+                     params={"query": query, "orientation": "portrait", "per_page": 15}, timeout=30)
     if r.status_code != 200:
-        print(f"  pexels {r.status_code} for '{query}'")
         return None
-    for video in r.json().get("videos", []):
-        if video["id"] in used or video.get("duration", 0) < 3:
+    for v in r.json().get("videos", []):
+        if v["id"] in used or v.get("duration", 0) < 3:
             continue
-        files = [f for f in video["video_files"]
-                 if f.get("height") and f.get("width") and f["height"] >= f["width"]
-                 and f["height"] >= 1280 and f.get("file_type") == "video/mp4"]
-        if not files:
-            continue
-        best = min(files, key=lambda f: abs(f["height"] - 1920))
-        used.add(video["id"])
-        return best["link"]
+        files = [f for f in v["video_files"] if f.get("height") and f.get("width")
+                 and f["height"] >= f["width"] and f["height"] >= 1280 and f.get("file_type") == "video/mp4"]
+        if files:
+            used.add(v["id"])
+            return min(files, key=lambda f: abs(f["height"] - 1920))["link"]
     return None
 
 
@@ -160,16 +256,11 @@ def pixabay_search(query: str, used: set[int]) -> str | None:
     key = os.getenv("PIXABAY_API_KEY")
     if not key:
         return None
-    r = requests.get(
-        "https://pixabay.com/api/videos/",
-        params={"key": key, "q": query[:100], "per_page": 20, "safesearch": "true", "order": "popular"},
-        timeout=30,
-    )
+    r = requests.get("https://pixabay.com/api/videos/",
+                     params={"key": key, "q": query[:100], "per_page": 20, "safesearch": "true"}, timeout=30)
     if r.status_code != 200:
-        print(f"  pixabay {r.status_code} for '{query}'")
         return None
     hits = [h for h in r.json().get("hits", []) if h["id"] not in used and h.get("duration", 0) >= 3]
-    # prefer vertical clips; landscape ones are centre-cropped to 9:16
     hits.sort(key=lambda h: h["videos"]["medium"].get("height", 0) <= h["videos"]["medium"].get("width", 1))
     for h in hits:
         for size in ("large", "medium"):
@@ -180,13 +271,12 @@ def pixabay_search(query: str, used: set[int]) -> str | None:
     return None
 
 
-SOURCES = (pixabay_search, pexels_search)
-
-
 def fetch_clip(query: str, dest: Path, used: set[int]) -> bool:
-    words = query.split()
+    if dest.exists():
+        return True
+    words = query.split() or ["nature"]
     for q in dict.fromkeys((query, " ".join(words[-2:]), words[-1])):
-        url = next((u for src in SOURCES if (u := src(q, used))), None)
+        url = pixabay_search(q, used) or pexels_search(q, used)
         if url:
             with requests.get(url, stream=True, timeout=120) as r:
                 r.raise_for_status()
@@ -197,39 +287,82 @@ def fetch_clip(query: str, dest: Path, used: set[int]) -> bool:
     return False
 
 
-# ---------------------------------------------------------------- render helpers
+# ================================================================ render helpers
 
 def ff(*args: str) -> None:
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *args], check=True)
 
 
-ENC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", str(FPS)]
+ENC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p", "-r", str(FPS)]
+LOOK = "eq=contrast=1.06:saturation=1.03,vignette=PI/5,noise=alls=3:allf=t"
 
 
-def render_scene(src: Path | None, seconds: float, dest: Path, idx: int) -> None:
-    fade = f"fade=t=in:st=0:d=0.35,fade=t=out:st={seconds - 0.35:.2f}:d=0.35"
-    if src and src.exists():
-        vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-              f"setsar=1,fps={FPS},eq=contrast=1.05:saturation=0.92,vignette=PI/5,{fade}")
-        ff("-ss", "0.3", "-t", f"{seconds:.2f}", "-i", str(src), "-vf", vf, "-an", *ENC, str(dest))
-    else:
-        # fallback: slow moving dark gradient so the video still renders
-        hue = (idx * 37) % 360
-        # computed at 1/10 resolution then upscaled - smooth and fast
-        vf = (f"geq=r='40+30*sin(2*PI*(X/W+T/8))':g='30+20*sin(2*PI*(Y/H+T/9))':b='60+40*cos(2*PI*(X/W-T/7))',"
-              f"hue=h={hue},scale={W}:{H}:flags=bicubic,{fade}")
-        ff("-f", "lavfi", "-t", f"{seconds:.2f}", "-i", f"color=c=black:s={W // 10}x{H // 10}:r={FPS}",
-           "-vf", vf, *ENC, str(dest))
+def font_file(bold: bool = True) -> str:
+    try:
+        out = subprocess.run(["fc-match", "-f", "%{file}", f"{FONT}:{'bold' if bold else 'regular'}"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        if out:
+            return out
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    return "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 
-def render_end_card(seconds: float, dest: Path) -> None:
-    vf = f"vignette=PI/4,fade=t=in:st=0:d=0.5,fade=t=out:st={seconds - 0.6:.2f}:d=0.6"
-    ff("-f", "lavfi", "-t", f"{seconds:.2f}", "-i", f"color=c=0x0b0b0f:s={W}x{H}:r={FPS}",
+def kenburns(img: Path, seconds: float, motion: str, dest: Path) -> None:
+    n = int(round(seconds * FPS))
+    z = 0.14
+    moves = {
+        "zoom_in":   (f"1+{z}*on/{n}", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),
+        "zoom_out":  (f"1+{z}-{z}*on/{n}", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),
+        "pan_left":  (f"1+{z}", f"(iw-iw/zoom)*(1-on/{n})", "ih/2-(ih/zoom/2)"),
+        "pan_right": (f"1+{z}", f"(iw-iw/zoom)*on/{n}", "ih/2-(ih/zoom/2)"),
+        "pan_up":    (f"1+{z}", "iw/2-(iw/zoom/2)", f"(ih-ih/zoom)*(1-on/{n})"),
+    }
+    zz, xx, yy = moves.get(motion, moves["zoom_in"])
+    # upscale first so the slow zoom stays sharp and jitter-free
+    vf = (f"scale={W * 2}:{H * 2}:force_original_aspect_ratio=increase,crop={W * 2}:{H * 2},"
+          f"zoompan=z='{zz}':x='{xx}':y='{yy}':d={n}:s={W}x{H}:fps={FPS},setsar=1,{LOOK}")
+    ff("-i", str(img), "-vf", vf, "-frames:v", str(n), *ENC, str(dest))
+
+
+def clip_scene(src: Path, seconds: float, dest: Path) -> None:
+    vf = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={FPS},{LOOK}"
+    ff("-ss", "0.3", "-t", f"{seconds:.2f}", "-i", str(src), "-vf", vf, "-an", *ENC, str(dest))
+
+
+def gradient_scene(seconds: float, dest: Path, idx: int) -> None:
+    hue = (idx * 37) % 360
+    vf = (f"geq=r='40+30*sin(2*PI*(X/W+T/8))':g='30+20*sin(2*PI*(Y/H+T/9))':b='60+40*cos(2*PI*(X/W-T/7))',"
+          f"hue=h={hue},scale={W}:{H}:flags=bicubic")
+    ff("-f", "lavfi", "-t", f"{seconds:.2f}", "-i", f"color=c=black:s={W // 10}x{H // 10}:r={FPS}",
        "-vf", vf, *ENC, str(dest))
 
 
+def end_card(seconds: float, dest: Path) -> None:
+    ff("-f", "lavfi", "-t", f"{seconds:.2f}", "-i", f"color=c=0x0b0b0f:s={W}x{H}:r={FPS}",
+       "-vf", "vignette=PI/4", *ENC, str(dest))
+
+
+def crossfade_all(parts: list[Path], lengths: list[float], dest: Path) -> list[float]:
+    """Join clips with crossfades. Returns the start time of each clip in the output."""
+    starts, t = [], 0.0
+    for i, L in enumerate(lengths):
+        starts.append(t)
+        t += L - XF
+    inputs = sum((["-i", str(p)] for p in parts), [])
+    chain, prev = [], "[0:v]"
+    for i in range(1, len(parts)):
+        trans = "fadeblack" if i == len(parts) - 1 else random.choice(["fade", "fade", "dissolve", "smoothleft"])
+        out = f"[v{i}]"
+        chain.append(f"{prev}[{i}:v]xfade=transition={trans}:duration={XF}:offset={starts[i]:.3f}{out}")
+        prev = out
+    chain.append(f"{prev}fade=t=in:st=0:d=0.4,format=yuv420p[vout]")
+    ff(*inputs, "-filter_complex", ";".join(chain), "-map", "[vout]", *ENC, str(dest))
+    return starts
+
+
 def ass_time(t: float) -> str:
-    h, rem = divmod(t, 3600)
+    h, rem = divmod(max(t, 0), 3600)
     m, s = divmod(rem, 60)
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
@@ -238,7 +371,8 @@ def ass_escape(text: str) -> str:
     return text.replace("\\", "").replace("{", "(").replace("}", ")").replace("\n", " ")
 
 
-def write_captions(scenes: list[dict], ending: str, end_start: float, end_len: float, dest: Path) -> None:
+def write_captions(scenes: list[dict], starts: list[float], ending: str,
+                   end_start: float, end_len: float, dest: Path) -> None:
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -254,22 +388,21 @@ Style: Tag,{FONT},44,&H00B4B4B4,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    lines, t = [], 0.0
-    for s in scenes:
+    lines = []
+    for s, t in zip(scenes, starts):
         cap = ass_escape(s.get("caption", "").strip())
         if cap:
-            a, b = t + 0.25, t + s["seconds"] - 0.2
+            a, b = t + XF * 0.6, t + s["seconds"] - XF
             lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Cap,,0,0,0,,"
                          f"{{\\fad(280,220)\\t(0,280,\\fscx104\\fscy104)\\t(280,500,\\fscx100\\fscy100)}}{cap}")
-        t += s["seconds"]
-    a, b = end_start + 0.4, end_start + end_len - 0.4
-    lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},End,,0,0,0,,{{\\fad(600,500)}}{ass_escape(ending)}")
-    lines.append(f"Dialogue: 0,{ass_time(a + 0.8)},{ass_time(b)},Tag,,0,0,0,,{{\\fad(600,500)}}"
+    a, b = end_start + 0.5, end_start + end_len - 0.3
+    lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},End,,0,0,0,,{{\\fad(600,400)}}{ass_escape(ending)}")
+    lines.append(f"Dialogue: 0,{ass_time(a + 0.8)},{ass_time(b)},Tag,,0,0,0,,{{\\fad(600,400)}}"
                  f"{ass_escape(CHANNEL_NAME.upper())}")
     dest.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
 
 
-CHORDS = {  # root frequencies of a slow 2-chord loop per mood
+CHORDS = {  # slow 2-chord loop per mood (original synthesized music, no copyright)
     "warm":      [(261.6, 329.6, 392.0), (220.0, 261.6, 329.6)],
     "sad":       [(220.0, 261.6, 329.6), (174.6, 220.0, 261.6)],
     "tense":     [(196.0, 233.1, 293.7), (185.0, 233.1, 277.2)],
@@ -278,8 +411,8 @@ CHORDS = {  # root frequencies of a slow 2-chord loop per mood
 }
 
 
-def make_music(mood: str, seconds: float, dest: Path) -> None:
-    """Use a track from music/<mood>/ or music/ if present, else synthesise an ambient pad."""
+def make_music(mood: str, seconds: float, dest: Path) -> str:
+    """Royalty-free track from music/ if provided, else an original synthesized pad."""
     pool = list((MUSIC_DIR / mood).glob("*.mp3")) + list(MUSIC_DIR.glob("*.mp3"))
     fade_out = max(0.0, seconds - 2.5)
     if pool:
@@ -287,7 +420,7 @@ def make_music(mood: str, seconds: float, dest: Path) -> None:
         ff("-stream_loop", "-1", "-i", str(track), "-t", f"{seconds:.2f}",
            "-af", f"afade=t=in:d=1.5,afade=t=out:st={fade_out:.2f}:d=2.5,volume=0.8",
            "-c:a", "aac", "-b:a", "192k", str(dest))
-        return
+        return track.name
     chords = CHORDS.get(mood, CHORDS["warm"])
     half = 4.0
     tones = []
@@ -296,92 +429,188 @@ def make_music(mood: str, seconds: float, dest: Path) -> None:
             gate = f"between(mod(t,{half * 2}),{lo},{lo + half})"
             tones.append(f"0.09*sin(2*PI*{f / 2:.2f}*t)*{gate}")
             tones.append(f"0.04*sin(2*PI*{f:.2f}*t+0.3*sin(2*PI*0.2*t))*{gate}")
-    expr = "+".join(tones)
     af = (f"lowpass=f=1800,aecho=0.8:0.85:500|900:0.35|0.25,"
           f"tremolo=f=0.25:d=0.3,afade=t=in:d=2,afade=t=out:st={fade_out:.2f}:d=2.5,volume=1.6")
-    ff("-f", "lavfi", "-t", f"{seconds:.2f}", "-i", f"aevalsrc='{expr}':s=44100:c=stereo",
+    ff("-f", "lavfi", "-t", f"{seconds:.2f}", "-i", f"aevalsrc='{'+'.join(tones)}':s=44100:c=stereo",
        "-af", af, "-c:a", "aac", "-b:a", "192k", str(dest))
+    return "original synthesized score"
 
 
-def build_video(sb: dict, work: Path) -> Path:
+def drawtext_escape(s: str) -> str:
+    return s.replace("\\", "\\\\").replace(":", "\\:").replace("'", "’").replace("%", "\\%")
+
+
+def make_thumbnail(sb: dict, src: Path | None, dest: Path) -> None:
+    """1080x1920 JPEG: AI image + big punchy text with dark gradient for readability."""
+    text = (sb.get("thumbnail_text") or sb["title"]).upper()
+    words, lines, cur = text.split(), [], ""
+    for w in words:  # wrap ~12 chars per line
+        if len(cur) + len(w) + 1 > 12 and cur:
+            lines.append(cur)
+            cur = w
+        else:
+            cur = f"{cur} {w}".strip()
+    lines.append(cur)
+    ffile = font_file(True)
+    draws = []
+    for i, line in enumerate(lines[:3]):
+        y = 220 + i * 170
+        draws.append(f"drawtext=fontfile='{ffile}':text='{drawtext_escape(line)}':fontsize=150:"
+                     f"fontcolor=white:borderw=10:bordercolor=black@0.85:x=(w-text_w)/2:y={y}")
+    grad = "drawbox=x=0:y=0:w=iw:h=760:color=black@0.35:t=fill"
+    vf = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},eq=contrast=1.1:saturation=1.15,{grad},{','.join(draws)}"
+    if src and src.exists():
+        ff("-i", str(src), "-vf", vf, "-frames:v", "1", "-q:v", "3", str(dest))
+    else:
+        ff("-f", "lavfi", "-i", f"color=c=0x1e1b4b:s={W}x{H}", "-vf", vf, "-frames:v", "1", "-q:v", "3", str(dest))
+    while dest.stat().st_size > 1_900_000:  # YouTube thumbnail limit 2 MB
+        ff("-i", str(dest), "-q:v", "6", str(dest.with_suffix(".tmp.jpg")))
+        dest.with_suffix(".tmp.jpg").replace(dest)
+
+
+# ================================================================ build
+
+def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     work.mkdir(parents=True, exist_ok=True)
     used: set[int] = set()
-    parts = []
+    parts, lengths, report = [], [], {"ai": 0, "stock": 0, "fallback": 0}
+    base_seed = random.randint(1, 10_000_000)
     for i, s in enumerate(sb["scenes"]):
-        raw = work / f"raw_{i:02d}.mp4"
-        ok = raw.exists() or fetch_clip(s["query"], raw, used)
-        print(f"  scene {i + 1:2d}: {s['query']!r:32} {'footage' if ok else 'fallback'}")
+        L = s["seconds"] + XF  # extra overlap for crossfade
         part = work / f"scene_{i:02d}.mp4"
-        render_scene(raw if ok else None, s["seconds"], part, i)
+        img = work / f"img_{i:02d}.png"
+        raw = work / f"raw_{i:02d}.mp4"
+        src = None
+        if VISUAL_MODE == "ai":
+            src = gen_image(full_prompt(sb, s["image_prompt"]), img, base_seed + i)
+        if src:
+            kenburns(img, L, s["camera"], part)
+            report["ai"] += 1
+        elif fetch_clip(s["query"], raw, used):
+            clip_scene(raw, L, part)
+            src = "stock"
+            report["stock"] += 1
+        else:
+            gradient_scene(L, part, i)
+            src = "fallback"
+            report["fallback"] += 1
+        print(f"  scene {i + 1:2d} [{src:12}] {s['camera']:9} | {s.get('caption', '')}")
         parts.append(part)
+        lengths.append(L)
 
     end_len = 4.0
-    end_card = work / "end.mp4"
-    render_end_card(end_len, end_card)
-    parts.append(end_card)
+    end = work / "end.mp4"
+    end_card(end_len + XF, end)
+    parts.append(end)
+    lengths.append(end_len + XF)
 
-    concat = work / "concat.txt"
-    concat.write_text("".join(f"file '{p.name}'\n" for p in parts), encoding="utf-8")
     joined = work / "joined.mp4"
-    ff("-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", str(joined))
-
-    body_len = sum(s["seconds"] for s in sb["scenes"])
-    total = body_len + end_len
+    starts = crossfade_all(parts, lengths, joined)
+    total = starts[-1] + lengths[-1]
     subs = work / "captions.ass"
-    write_captions(sb["scenes"], sb["ending"], body_len, end_len, subs)
+    write_captions(sb["scenes"], starts, sb["ending"], starts[-1], lengths[-1], subs)
     music = work / "music.m4a"
-    make_music(sb.get("music_mood", "warm"), total, music)
+    report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
 
     final = work / "short.mp4"
-    ff("-i", str(joined), "-i", str(music),
-       "-vf", f"ass={subs.as_posix()}", *ENC,
+    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}", *ENC,
        "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(final))
-    return final
+
+    thumb_img = work / "thumb_src.png"
+    if VISUAL_MODE == "ai" and sb.get("thumbnail_prompt"):
+        if not gen_image(full_prompt(sb, sb["thumbnail_prompt"]), thumb_img, base_seed + 999):
+            thumb_img = work / "img_00.png"
+    else:
+        thumb_img = work / "img_00.png"
+    make_thumbnail(sb, thumb_img if thumb_img.exists() else None, work / "thumbnail.jpg")
+    report["duration"] = round(total, 1)
+    return final, report
 
 
-# ---------------------------------------------------------------- upload
+# ================================================================ metadata
 
-def upload(video: Path, sb: dict) -> str:
+def clean_tag(t: str) -> str:
+    return re.sub(r"[<>\"]", "", t.lstrip("#")).strip()
+
+
+def build_metadata(sb: dict, report: dict) -> dict:
+    hashtags = [("#" + re.sub(r"[^\w]", "", h.lstrip("#"))) for h in sb.get("hashtags", []) if h.strip()]
+    hashtags = list(dict.fromkeys(hashtags + [CHANNEL_TAG, "#Shorts"]))[:6]
+    tags, total = [], 0
+    for t in [clean_tag(x) for x in sb.get("tags", [])] + ["silent stories", "no words story", "short film"]:
+        if t and t.lower() not in (x.lower() for x in tags) and total + len(t) + 3 < 480:
+            tags.append(t)
+            total += len(t) + 3
+    visuals = "AI-generated (original)" if report.get("ai") else "Pixabay / Pexels stock (royalty-free)"
+    description = (f"{sb['description'].strip()}\n\n"
+                   f"{' '.join(hashtags)}\n\n"
+                   f"🎬 {CHANNEL_NAME}: stories without words, for everyone, everywhere.\n"
+                   f"Visuals: {visuals} · Music: {report.get('music', 'original')}")
+    title = sb["title"].strip()[:90]
+    return {
+        "title": title,
+        "description": description[:4900],
+        "tags": tags,
+        "hashtags": hashtags,
+        "social_caption": sb.get("social_caption", ""),
+        "synthetic": bool(report.get("ai")),
+    }
+
+
+# ================================================================ upload
+
+def youtube_client():
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload
-
     creds = Credentials(
         token=None,
         refresh_token=os.environ["YT_REFRESH_TOKEN"],
         client_id=os.environ["YT_CLIENT_ID"],
         client_secret=os.environ["YT_CLIENT_SECRET"],
         token_uri="https://oauth2.googleapis.com/token",
-        scopes=["https://www.googleapis.com/auth/youtube.upload"],
     )
-    yt = build("youtube", "v3", credentials=creds, cache_discovery=False)
-    tags = [t.lstrip("#") for t in sb.get("tags", [])][:12]
-    description = (f"{sb['description']}\n\n{CHANNEL_TAG} #Shorts #NoWords "
-                   f"#{tags[0].replace(' ', '') if tags else 'Story'}\n\nFootage: Pixabay / Pexels")
+    return build("youtube", "v3", credentials=creds, cache_discovery=False)
+
+
+def upload(video: Path, thumb: Path, meta: dict) -> str:
+    from googleapiclient.errors import HttpError
+    from googleapiclient.http import MediaFileUpload
+
+    yt = youtube_client()
     body = {
         "snippet": {
-            "title": f"{sb['title'][:85]} #Shorts",
-            "description": description,
-            "tags": tags + ["silent stories", "no talking", "shorts"],
+            "title": meta["title"],
+            "description": meta["description"],
+            "tags": meta["tags"],
             "categoryId": os.getenv("YT_CATEGORY", "1"),  # 1 = Film & Animation
+            "defaultLanguage": "en",
         },
         "status": {
             "privacyStatus": PRIVACY,
             "selfDeclaredMadeForKids": False,
-            "containsSyntheticMedia": False,  # real stock footage, no AI faces/voices
+            "embeddable": True,
+            # YouTube policy: disclose realistic AI-generated visuals
+            "containsSyntheticMedia": meta["synthetic"],
         },
     }
     req = yt.videos().insert(
         part="snippet,status", body=body,
-        media_body=MediaFileUpload(str(video), mimetype="video/mp4", chunksize=-1, resumable=True),
-    )
+        media_body=MediaFileUpload(str(video), mimetype="video/mp4", chunksize=-1, resumable=True))
     resp = None
     while resp is None:
         _, resp = req.next_chunk()
-    return resp["id"]
+    vid = resp["id"]
+    print(f"Uploaded as {resp['status']['privacyStatus']}: https://youtube.com/shorts/{vid}")
+    try:
+        yt.thumbnails().set(videoId=vid, media_body=MediaFileUpload(str(thumb), mimetype="image/jpeg")).execute()
+        print("Thumbnail set.")
+    except HttpError as e:
+        print(f"Thumbnail not set ({e.status_code}). Verify your channel phone number at "
+              f"youtube.com/verify to enable custom thumbnails.")
+    return vid
 
 
-# ---------------------------------------------------------------- main
+# ================================================================ main
 
 def main() -> int:
     item = next_story()
@@ -396,18 +625,21 @@ def main() -> int:
     (OUT / "storyboard.json").write_text(json.dumps(sb, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Title: {sb['title']}  ({len(sb['scenes'])} scenes, mood {sb.get('music_mood')})")
 
-    video = build_video(sb, OUT / "work")
-    final = OUT / "short.mp4"
-    video.replace(final)
-    print(f"Rendered {final}")
+    video, report = build_video(sb, OUT / "work")
+    final, thumb = OUT / "short.mp4", OUT / "thumbnail.jpg"
+    shutil.move(video, final)
+    shutil.move(OUT / "work" / "thumbnail.jpg", thumb)
+    meta = build_metadata(sb, report)
+    (OUT / "metadata.json").write_text(json.dumps({**meta, "report": report}, indent=2, ensure_ascii=False),
+                                       encoding="utf-8")
+    (OUT / "social.txt").write_text(f"{meta['title']}\n\n{meta['social_caption']}\n", encoding="utf-8")
+    print(f"Rendered {final} ({report})")
 
-    video_id = None
     if SKIP_UPLOAD:
-        print("SKIP_UPLOAD=true - download the video from the workflow artifacts.")
-    else:
-        video_id = upload(final, sb)
-        print(f"Uploaded: https://youtube.com/shorts/{video_id}")
-        mark_done(idea, video_id)
+        print("Preview only - download short.mp4, thumbnail.jpg and metadata.json from the run's artifacts.")
+        return 0
+    vid = upload(final, thumb, meta)
+    mark_done(idea, vid)
     return 0
 
 
