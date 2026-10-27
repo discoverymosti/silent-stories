@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  models: read   # free GitHub Models backup for story text
 
 concurrency:
   group: publish
@@ -73,6 +74,11 @@ jobs:
       - name: Make the Short
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           GEMINI_IMAGE_MODEL: ${{ vars.GEMINI_IMAGE_MODEL }}
           VISUAL_MODE: ${{ vars.VISUAL_MODE || 'ai' }}
