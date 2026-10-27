@@ -287,12 +287,9 @@ def ask_gemini(prompt: str) -> str:
 
 # Free OpenAI-compatible backups for the story text, tried in order when Gemini is busy or
 # out of quota. Each is used only if its key is present; all are free tiers without billing.
-#   GitHub Models: the workflow's own GITHUB_TOKEN (permissions: models: read), no signup
 #   Groq:          GROQ_API_KEY       (console.groq.com, free plan, no card)
 #   OpenRouter:    OPENROUTER_API_KEY (openrouter.ai, only ":free" models are requested)
 FREE_TEXT_PROVIDERS = [
-    ("github-models", "https://models.github.ai/inference/chat/completions", "GITHUB_TOKEN",
-     ["openai/gpt-4.1-mini", "meta/Llama-3.3-70B-Instruct"]),
     ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY",
      ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]),
     ("openrouter", "https://openrouter.ai/api/v1/chat/completions", "OPENROUTER_API_KEY",
@@ -323,11 +320,14 @@ def ask_openai_compatible(name: str, url: str, key: str, models: list[str], prom
             if r.status_code in (401, 403):
                 return None  # bad/missing permission: skip this provider
             continue
+        if "json" not in r.headers.get("content-type", ""):
+            print(f"  {name} answered {r.headers.get('content-type')} {r.text[:60]!r}, not an API reply; skipping")
+            return None
         try:
             text = r.json()["choices"][0]["message"]["content"]
             json.loads(_strip_fences(text))
         except (KeyError, IndexError, TypeError, ValueError) as e:
-            print(f"  {name}/{model} bad response: {e}")
+            print(f"  {name}/{model} bad response: {e} | {r.headers.get('content-type')} | {r.text[:300]!r}")
             continue
         print(f"  answer by {name}/{model}")
         return text
