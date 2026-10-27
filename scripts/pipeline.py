@@ -293,6 +293,8 @@ def ask_gemini(prompt: str) -> str:
 FREE_TEXT_PROVIDERS = [
     ("github-models", "https://models.github.ai/inference/chat/completions", "GITHUB_TOKEN",
      ["openai/gpt-4.1-mini", "meta/Llama-3.3-70B-Instruct"]),
+    ("github-models-azure", "https://models.inference.ai.azure.com/chat/completions", "GITHUB_TOKEN",
+     ["gpt-4o-mini", "Meta-Llama-3.1-70B-Instruct"]),
     ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY",
      ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]),
     ("openrouter", "https://openrouter.ai/api/v1/chat/completions", "OPENROUTER_API_KEY",
@@ -309,7 +311,10 @@ def ask_openai_compatible(name: str, url: str, key: str, models: list[str], prom
         if name == "openrouter" and not model.endswith(":free"):
             continue  # never a paid OpenRouter model
         try:
-            r = requests.post(url, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+            if name.startswith("github"):
+                headers |= {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+            r = requests.post(url, headers=headers,
                               json={"model": model, "temperature": 0.9, "max_tokens": 8000,
                                     "response_format": {"type": "json_object"},
                                     "messages": [{"role": "system", "content": "Reply with valid JSON only."},
@@ -323,6 +328,9 @@ def ask_openai_compatible(name: str, url: str, key: str, models: list[str], prom
             if r.status_code in (401, 403):
                 return None  # bad/missing permission: skip this provider
             continue
+        if "json" not in r.headers.get("content-type", ""):
+            print(f"  {name} answered {r.headers.get('content-type')} {r.text[:60]!r}, not an API reply; skipping")
+            return None
         try:
             text = r.json()["choices"][0]["message"]["content"]
             json.loads(_strip_fences(text))
