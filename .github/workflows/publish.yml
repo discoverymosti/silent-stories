@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -29,19 +29,26 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install ffmpeg + fonts
-        timeout-minutes: 10
-        env:
-          DEBIAN_FRONTEND: noninteractive
-          NEEDRESTART_MODE: a
+      - name: Install ffmpeg (static build, no apt)
+        timeout-minutes: 6
         run: |
-          APT="sudo -E apt-get -o DPkg::Lock::Timeout=120 -o Acquire::Retries=3 -y -qq --no-install-recommends"
+          set -e
+          URL=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
           for i in 1 2 3; do
-            timeout 240 sudo -E apt-get -o Acquire::Retries=3 update -qq && \
-            timeout 300 $APT install ffmpeg fonts-noto-core fonts-dejavu-core && break
-            echo "apt attempt $i failed, retrying"; sleep 10
+            curl -fsSL --retry 3 --max-time 180 "$URL" -o /tmp/ffmpeg.tar.xz && break
+            echo "download attempt $i failed"; sleep 10
           done
-          ffmpeg -hide_banner -filters | grep -q " ass " && echo "ffmpeg ready"
+          mkdir -p /tmp/ffmpeg && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg --strip-components=1
+          echo "/tmp/ffmpeg/bin" >> "$GITHUB_PATH"
+          /tmp/ffmpeg/bin/ffmpeg -hide_banner -filters | grep -E " (ass|zoompan|xfade) " 
+
+      - name: Install fonts (optional)
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          timeout 90 sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 update -qq || true
+          timeout 120 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends fonts-noto-core fontconfig || true
+          fc-match "Noto Sans:bold" || true
 
       - name: Install Python deps
         run: pip install -r requirements.txt
