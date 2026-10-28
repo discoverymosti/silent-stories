@@ -278,14 +278,17 @@ def gemini_candidates(kind: str) -> list[str]:
     if kind == "text":
         pool = [n for n in names if re.search(r"flash|pro", n)
                 and not re.search(r"image|tts|audio|live|embed|thinking|computer|robotics", n)]
-        # prefer flash, then flash-lite, then pro; newest stable first within each
-        rank = lambda n: (0 if "flash" in n and "lite" not in n else 1 if "lite" in n else 2,)
-        pool.sort(key=lambda n: (rank(n), tuple(-x if isinstance(x, (int, float)) else x for x in _version_key(n))))
+        newest = lambda xs: sorted(xs, key=_version_key, reverse=True)
+        flash = newest([n for n in pool if "flash" in n and "lite" not in n])
+        lite = newest([n for n in pool if "lite" in n])
+        pro = newest([n for n in pool if "pro" in n and "flash" not in n])
+        # every model has its own free quota: mix families so that when the Flash models are
+        # busy or used up for the day, Flash-Lite (larger free quota) and Pro still answer
+        pool = flash[:3] + lite[:3] + pro[:1]
     else:
-        pool = sorted([n for n in names if "image" in n and "gemini" in n], key=_version_key, reverse=True)
+        pool = sorted([n for n in names if "image" in n and "gemini" in n], key=_version_key, reverse=True)[:5]
     if wanted:
         pool = [wanted] + [n for n in pool if n != wanted]
-    pool = pool[:5]
     print(f"  Gemini {kind} models: {pool}")
     _model_cache[kind] = pool
     return pool
@@ -327,10 +330,10 @@ def ask_gemini(prompt: str) -> str:
                     continue
             last = f"{r.status_code}: {r.text[:300]}"
             print(f"  {model} -> {r.status_code}, attempt {attempt + 1}")
-            if r.status_code in (429, 500, 502, 503, 504):
-                time.sleep(15 * (attempt + 1))
+            if r.status_code in (500, 502, 503, 504):  # busy: one short wait, then the next model
+                time.sleep(10)
                 continue
-            break  # 400/403/404: try next model
+            break  # 429: this model's free quota is used up; 400/403/404: unusable. Next model.
     raise SystemExit(f"Gemini failed on all models. Last error {last}")
 
 
@@ -350,17 +353,35 @@ def _strip_fences(text: str) -> str:
     return re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
 
 
+def text_providers() -> list[tuple[str, str, str, list[str]]]:
+    """(name, url, key, models) of the free text backups usable in this run, in the order tried."""
+    out = [(name, url, os.environ[env], models) for name, url, env, models in FREE_TEXT_PROVIDERS if os.getenv(env)]
+    # Pollinations: works without a key (a free token from auth.pollinations.ai raises its limits)
+    out.append(("pollinations", "https://text.pollinations.ai/openai", os.getenv("POLLINATIONS_TOKEN", ""),
+                ["openai", "mistral"]))
+    # Cloudflare Workers AI text: reuses the image key but spends the same daily free allowance,
+    # so it is the last resort
+    acct, token = os.getenv("CF_ACCOUNT_ID"), os.getenv("CF_API_TOKEN")
+    if acct and token:
+        out.append(("cloudflare", f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/v1/chat/completions",
+                    token, ["@cf/meta/llama-3.3-70b-instruct-fp8-fast"]))
+    return out
+
+
 def ask_openai_compatible(name: str, url: str, key: str, models: list[str], prompt: str) -> str | None:
+    headers = {"Content-Type": "application/json"} | ({"Authorization": f"Bearer {key}"} if key else {})
     for model in models:
         if name == "openrouter" and not model.endswith(":free"):
             continue  # never a paid OpenRouter model
+        body = {"model": model, "temperature": 0.9, "max_tokens": 8000,
+                "response_format": {"type": "json_object"},
+                "messages": [{"role": "system", "content": "Reply with valid JSON only."},
+                             {"role": "user", "content": prompt}]}
         try:
-            r = requests.post(url, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                              json={"model": model, "temperature": 0.9, "max_tokens": 8000,
-                                    "response_format": {"type": "json_object"},
-                                    "messages": [{"role": "system", "content": "Reply with valid JSON only."},
-                                                 {"role": "user", "content": prompt}]},
-                              timeout=180)
+            r = requests.post(url, headers=headers, json=body, timeout=180)
+            if r.status_code == 400:  # some models reject JSON mode: ask again without it
+                body.pop("response_format")
+                r = requests.post(url, headers=headers, json=body, timeout=180)
         except requests.RequestException as e:
             print(f"  {name}/{model} error: {e}")
             continue
@@ -390,15 +411,14 @@ def ask_ai(prompt: str) -> str:
             return ask_gemini(prompt)
         except SystemExit as e:
             print(f"  Gemini unavailable ({str(e)[:120]}); trying free backups")
-    for name, url, env, models in FREE_TEXT_PROVIDERS:
-        if os.getenv(env):
-            text = ask_openai_compatible(name, url, os.environ[env], models, prompt)
-            if text:
-                return text
+    for name, url, key, models in text_providers():
+        text = ask_openai_compatible(name, url, key, models, prompt)
+        if text:
+            return text
     if os.getenv("ANTHROPIC_API_KEY") and not FREE_ONLY:
         return ask_claude(prompt)
-    raise SystemExit("No AI text provider answered. Check GEMINI_API_KEY (or add a free GROQ_API_KEY / "
-                     "OPENROUTER_API_KEY backup).")
+    raise SystemExit("No AI text provider answered (all busy or out of free quota). Add a free "
+                     "GROQ_API_KEY backup, or wait for the daily reset.")
 
 
 def ask_claude(prompt: str) -> str:
@@ -1173,7 +1193,7 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
         try:
             resp = insert("snippet,status,localizations")
         except HttpError as e:
-            if _http_status(e) != 400:
+            if not 400 <= (_http_status(e) or 0) < 500:
                 raise
             print(f"  YouTube refused the translations ({e}); uploading without them")
             body.pop("localizations")
