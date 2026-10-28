@@ -53,6 +53,9 @@ PRIVACY = os.getenv("YT_PRIVACY", "private")
 SKIP_UPLOAD = os.getenv("SKIP_UPLOAD", "false").lower() == "true"
 CHANNEL_TAG = os.getenv("CHANNEL_HASHTAG", "#DiscoveryMosti")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME", "DiscoveryMosti")
+CAMERA_MOVES = ("zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up")
+# YouTube shows viewers the title/description in their language; the video itself has no speech
+LANGS = [c.strip() for c in os.getenv("YT_LANGUAGES", "es,pt,hi,id,ar,fr,de,ja").split(",") if c.strip()]
 # refuse to upload if more than this many scenes ended up as plain gradient filler
 MAX_FALLBACK = int(os.getenv("MAX_FALLBACK_SCENES", "4" if FILM else "2"))
 WATERMARK = os.getenv("WATERMARK", CHANNEL_NAME)
@@ -106,7 +109,7 @@ def uploaded_within(hours: float) -> bool:
 
 REFILL_PROMPT = """You plan content for "{channel}", a worldwide YouTube channel of SILENT stories:
 no voiceover, no dialogue, only cinematic images, short captions and music.
-Write {n} NEW, original {kind} ideas for a global audience (any country; universal emotions).
+{learn}Write {n} NEW, original {kind} ideas for a global audience (any country; universal emotions).
 Each idea: one sentence with a clear character, situation and emotional or surprising payoff.
 {genres}
 Do not repeat or closely resemble any of these existing ideas:
@@ -124,8 +127,16 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
     if DONE.exists():
         existing += [l.split("|")[0].strip()[:90] for l in DONE.read_text(encoding="utf-8").splitlines() if l.strip()]
     n = 4 if FILM else 10
+    perf, learn = channel_performance(), ""
+    if len(perf) >= 4 and perf[0][1] > 0:
+        print("  top videos so far: " + "; ".join(f"{t[:40]} ({v})" for t, v in perf[:3]))
+        half = len(perf) // 2  # best and worst lists never share a video
+        learn = ("What our audience watched most (lean toward these themes, emotions and formats):\n"
+                 + "\n".join(f"- {t} ({v} views)" for t, v in perf[:min(5, half)])
+                 + "\nWhat worked least (avoid repeating these angles):\n"
+                 + "\n".join(f"- {t} ({v} views)" for t, v in perf[-min(3, half):]) + "\n\n")
     prompt = REFILL_PROMPT.format(
-        channel=CHANNEL_NAME, n=n,
+        channel=CHANNEL_NAME, n=n, learn=learn,
         kind="three-act short-film (about 3 minutes)" if FILM else "YouTube Shorts (about 50 seconds)",
         genres='genre is always "story".' if FILM else
         'Mix genres: about half "story" (emotional micro-drama), a quarter "explainer" (how something '
@@ -141,6 +152,24 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
     if new:
         STORIES.write_text("\n".join(lines).rstrip() + "\n" + "\n".join(new) + "\n", encoding="utf-8")
         print(f"  added {len(new)} fresh ideas to {STORIES.name}")
+
+
+def channel_performance(limit: int = 50) -> list[tuple[str, int]]:
+    """(title, views) of our recent uploads, most viewed first; [] if unavailable.
+    Uses the read-only YouTube access granted when the channel was connected (1 quota unit)."""
+    if not (DONE.exists() and os.getenv("YT_CLIENT_ID")):
+        return []
+    ids = re.findall(r"(?:shorts/|youtu\.be/)([\w-]{11})", DONE.read_text(encoding="utf-8"))[-limit:]
+    if not ids:
+        return []
+    try:
+        items = youtube_client().videos().list(part="snippet,statistics", id=",".join(ids),
+                                               maxResults=50).execute().get("items", [])
+    except (SystemExit, Exception) as e:  # stats are a bonus, never a reason to fail
+        print(f"  channel stats unavailable: {e}")
+        return []
+    rows = [(i["snippet"]["title"], int(i.get("statistics", {}).get("viewCount", 0))) for i in items]
+    return sorted(rows, key=lambda r: -r[1])
 
 
 # ================================================================ storyboard + SEO
@@ -160,6 +189,7 @@ STORY RULES
 - 9 to 11 scenes, total 45-55 seconds, each scene 3.5-6 seconds.
 - Scene 1 is the HOOK: the most striking image + a caption that creates a question.
 - Clear arc: hook -> build -> turn -> emotional payoff.
+- The final shot visually echoes the first shot, so the Short loops seamlessly when it replays.
 - Captions: max 7 simple words, present tense, no emojis. 2-3 scenes have "" (silent beats).
 - "ending": shareable closing line, max 8 words.
 - "music_mood": one of warm, sad, tense, curious, uplifting.
@@ -378,18 +408,53 @@ def ask_claude(prompt: str) -> str:
     return msg.content[0].text
 
 
+def storyboard_problem(sb) -> str:
+    """Why a storyboard can't be used ("" if it can). Drops scenes without an image prompt."""
+    if not isinstance(sb, dict):
+        return "not a JSON object"
+    if not str(sb.get("title") or "").strip():
+        return "missing title"
+    if not isinstance(sb.get("scenes"), list):
+        return "no scenes"
+    sb["scenes"] = [s for s in sb["scenes"] if isinstance(s, dict) and str(s.get("image_prompt") or "").strip()]
+    need = 12 if FILM else 5
+    if len(sb["scenes"]) < need:
+        return f"only {len(sb['scenes'])} usable scenes (need {need})"
+    return ""
+
+
 def storyboard(genre: str, idea: str) -> dict:
     prompt = STORYBOARD_PROMPT.format(genre=genre, idea=idea, channel=CHANNEL_NAME)
     if FILM:
         start, end = prompt.index("STORY RULES"), prompt.index("VISUAL RULES")
         prompt = (prompt[:start] + FILM_RULES + "\n" + prompt[end:]).replace(
             "YouTube\nShorts channel", "YouTube\nchannel").replace("vertical image", "widescreen 16:9 image")
-    sb = json.loads(_strip_fences(ask_ai(prompt)))
+    for attempt in range(2):  # an incomplete storyboard gets one fresh try
+        try:
+            sb = json.loads(_strip_fences(ask_ai(prompt)))
+            problem = storyboard_problem(sb)
+        except ValueError as e:
+            sb, problem = None, f"not valid JSON ({e})"
+        if not problem:
+            break
+        print(f"  storyboard rejected: {problem}" + ("; asking again" if attempt == 0 else ""))
+    else:
+        raise SystemExit(f"Storyboard unusable after 2 tries: {problem}")
+    sb["title"] = " ".join(str(sb["title"]).split())
+    sb["description"] = str(sb.get("description") or idea).strip()
+    sb["ending"] = str(sb.get("ending") or "Some stories need no words.").strip()
+    if sb.get("music_mood") not in CHORDS:
+        sb["music_mood"] = "warm"
     for s in sb["scenes"]:
-        s["seconds"] = max(3.0, min(10.0 if FILM else 7.0, float(s.get("seconds", 4.5))))
-        s.setdefault("camera", "zoom_in")
-        s.setdefault("query", s.get("image_prompt", "")[:40])
-        s.setdefault("caption", "")
+        try:
+            secs = float(s.get("seconds", 4.5))
+        except (TypeError, ValueError):
+            secs = 4.5
+        s["seconds"] = max(3.0, min(10.0 if FILM else 7.0, secs))
+        if s.get("camera") not in CAMERA_MOVES:
+            s["camera"] = "zoom_in"
+        s["caption"] = str(s.get("caption") or "")
+        s.setdefault("query", s["image_prompt"][:40])
         if isinstance(s.get("cast"), str):
             s["cast"] = [s["cast"]]
     sb.setdefault("style", "cinematic film still, soft natural light, 35mm, shallow depth of field")
@@ -743,8 +808,9 @@ def end_card(seconds: float, dest: Path) -> None:
        "-vf", "vignette=PI/4", *ENC, str(dest))
 
 
-def crossfade_all(parts: list[Path], lengths: list[float], dest: Path) -> list[float]:
-    """Join clips with crossfades. Returns the start time of each clip in the output."""
+def crossfade_all(parts: list[Path], lengths: list[float], dest: Path, fade_ends: bool = True) -> list[float]:
+    """Join clips with crossfades. Returns the start time of each clip in the output.
+    fade_ends=False (Shorts): no fade from/to black, so frame 1 is the hook and replays loop."""
     starts, t = [], 0.0
     for i, L in enumerate(lengths):
         starts.append(t)
@@ -752,11 +818,11 @@ def crossfade_all(parts: list[Path], lengths: list[float], dest: Path) -> list[f
     inputs = sum((["-i", str(p)] for p in parts), [])
     chain, prev = [], "[0:v]"
     for i in range(1, len(parts)):
-        trans = "fadeblack" if i == len(parts) - 1 else random.choice(["fade", "fade", "dissolve", "smoothleft"])
+        trans = "fadeblack" if fade_ends and i == len(parts) - 1 else random.choice(["fade", "fade", "dissolve", "smoothleft"])
         out = f"[v{i}]"
         chain.append(f"{prev}[{i}:v]xfade=transition={trans}:duration={XF}:offset={starts[i]:.3f}{out}")
         prev = out
-    chain.append(f"{prev}fade=t=in:st=0:d=0.4,format=yuv420p[vout]")
+    chain.append(f"{prev}{'fade=t=in:st=0:d=0.4,' if fade_ends else ''}format=yuv420p[vout]")
     ff(*inputs, "-filter_complex", ";".join(chain), "-map", "[vout]", *ENC, str(dest))
     return starts
 
@@ -783,9 +849,9 @@ WrapStyle: 0
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,{FONT},{64 if FILM else 78},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,5,3,2,90,90,{90 if FILM else 520},1
-Style: End,{FONT},92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,0,0,5,110,110,0,1
+Style: End,{FONT},92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,6,2,5,110,110,0,1
 Style: Title,{FONT},96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,0,0,5,160,160,0,1
-Style: Tag,{FONT},44,&H00B4B4B4,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4,0,1,0,0,2,90,90,{220 if FILM else 300},1
+Style: Tag,{FONT},44,&H00B4B4B4,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4,0,1,3,0,2,90,90,{220 if FILM else 300},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -904,8 +970,11 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
         end_card(intro_len, intro)
         parts.append(intro)
         lengths.append(intro_len)
+    hold = 0.0 if FILM else 2.8  # Shorts hold the last image for the closing line instead of a black card
     for i, s in enumerate(sb["scenes"]):
         L = s["seconds"] + XF  # extra overlap for crossfade
+        if i == len(sb["scenes"]) - 1:
+            L += hold
         part = work / f"scene_{i:02d}.mp4"
         img = work / f"img_{i:02d}.png"
         raw = work / f"raw_{i:02d}.mp4"
@@ -927,18 +996,19 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
         parts.append(part)
         lengths.append(L)
 
-    end_len = 4.0
-    end = work / "end.mp4"
-    end_card(end_len + XF, end)
-    parts.append(end)
-    lengths.append(end_len + XF)
+    if FILM:  # films close on a dark end card; Shorts end on the image so a replay loops
+        end = work / "end.mp4"
+        end_card(4.0 + XF, end)
+        parts.append(end)
+        lengths.append(4.0 + XF)
 
     joined = work / "joined.mp4"
-    starts = crossfade_all(parts, lengths, joined)
+    starts = crossfade_all(parts, lengths, joined, fade_ends=FILM)
     total = starts[-1] + lengths[-1]
     subs = work / "captions.ass"
     scene_starts = starts[1:] if FILM else starts
-    write_captions(sb["scenes"], scene_starts, sb["ending"], starts[-1], lengths[-1], subs,
+    end_start = starts[-1] if FILM else starts[-1] + sb["scenes"][-1]["seconds"] - 0.2
+    write_captions(sb["scenes"], scene_starts, sb["ending"], end_start, total - end_start, subs,
                    title=sb["title"] if FILM else "", title_len=intro_len)
     music = work / "music.m4a"
     report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
@@ -968,7 +1038,7 @@ def clean_tag(t: str) -> str:
     return re.sub(r"[<>\"]", "", t.lstrip("#")).strip()
 
 
-def build_metadata(sb: dict, report: dict) -> dict:
+def build_metadata(sb: dict, report: dict, genre: str = "story") -> dict:
     hashtags = [("#" + re.sub(r"[^\w]", "", h.lstrip("#"))) for h in sb.get("hashtags", []) if h.strip()]
     hashtags = list(dict.fromkeys(hashtags + [CHANNEL_TAG, "#ShortFilm" if FILM else "#Shorts"]))[:6]
     tags, total = [], 0
@@ -989,7 +1059,42 @@ def build_metadata(sb: dict, report: dict) -> dict:
         "hashtags": hashtags,
         "social_caption": sb.get("social_caption", ""),
         "synthetic": bool(report.get("ai")),
+        # explainers/facts are educational; stories are film
+        "category_id": os.getenv("YT_CATEGORY") or ("27" if genre in ("explainer", "fact") else "1"),
     }
+
+
+TRANSLATE_PROMPT = """Translate this YouTube video title and description for viewers in other countries.
+Keep the meaning, emotion and curiosity, and sound natural to native speakers (not word for word).
+Titles under 90 characters. Keep the description's line breaks. Keep names and numbers unchanged.
+Do not add anything.
+Language codes: {langs}
+TITLE: {title}
+DESCRIPTION:
+{description}
+Return ONLY JSON with exactly these codes as keys:
+{{"<code>": {{"title": str, "description": str}}}}"""
+
+
+def localize(title: str, description: str, tail: str) -> dict:
+    """YouTube localizations: viewers see the title/description in their own language.
+    `tail` (hashtags + channel line) is appended untranslated. Best effort: {} on any problem."""
+    if not LANGS:
+        return {}
+    try:
+        data = json.loads(_strip_fences(ask_ai(TRANSLATE_PROMPT.format(
+            langs=", ".join(LANGS), title=title, description=description))))
+    except (SystemExit, Exception) as e:  # noqa: BLE001 - translations must never stop an upload
+        print(f"  translations skipped: {e}")
+        return {}
+    out = {}
+    for code in LANGS:
+        v = data.get(code) if isinstance(data, dict) else None
+        if isinstance(v, dict) and str(v.get("title") or "").strip():
+            out[code] = {"title": " ".join(str(v["title"]).split())[:100],
+                         "description": (str(v.get("description") or "").strip() + tail)[:4900]}
+    print(f"  title/description translated: {', '.join(out) or 'none'}")
+    return out
 
 
 # ================================================================ upload
@@ -1020,6 +1125,11 @@ def youtube_client():
     return build("youtube", "v3", credentials=creds, cache_discovery=False)
 
 
+def _http_status(e: Exception) -> int | None:
+    status = getattr(e, "status_code", None) or getattr(getattr(e, "resp", None), "status", None)
+    return int(status) if status is not None else None
+
+
 def upload(video: Path, thumb: Path, meta: dict) -> str:
     from googleapiclient.errors import HttpError
     from googleapiclient.http import MediaFileUpload
@@ -1030,7 +1140,7 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
             "title": meta["title"],
             "description": meta["description"],
             "tags": meta["tags"],
-            "categoryId": os.getenv("YT_CATEGORY", "1"),  # 1 = Film & Animation
+            "categoryId": meta.get("category_id", "1"),  # 1 = Film & Animation, 27 = Education
             "defaultLanguage": "en",
         },
         "status": {
@@ -1041,20 +1151,35 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
             "containsSyntheticMedia": meta["synthetic"],
         },
     }
-    req = yt.videos().insert(
-        part="snippet,status", body=body,
-        media_body=MediaFileUpload(str(video), mimetype="video/mp4", chunksize=-1, resumable=True))
-    resp, retries = None, 0
-    while resp is None:
+    def insert(parts: str) -> dict:
+        req = yt.videos().insert(
+            part=parts, body=body,
+            media_body=MediaFileUpload(str(video), mimetype="video/mp4", chunksize=-1, resumable=True))
+        resp, retries = None, 0
+        while resp is None:
+            try:
+                _, resp = req.next_chunk()
+            except (HttpError, OSError) as e:
+                status = _http_status(e)
+                if retries >= 5 or (status is not None and status < 500):
+                    raise
+                retries += 1
+                print(f"  upload hiccup ({e}); retry {retries}/5")
+                time.sleep(2 ** retries)
+        return resp
+
+    if meta.get("localizations"):
+        body["localizations"] = meta["localizations"]
         try:
-            _, resp = req.next_chunk()
-        except (HttpError, OSError) as e:
-            status = getattr(e, "status_code", None) or getattr(getattr(e, "resp", None), "status", None)
-            if retries >= 5 or (status is not None and int(status) < 500):
+            resp = insert("snippet,status,localizations")
+        except HttpError as e:
+            if _http_status(e) != 400:
                 raise
-            retries += 1
-            print(f"  upload hiccup ({e}); retry {retries}/5")
-            time.sleep(2 ** retries)
+            print(f"  YouTube refused the translations ({e}); uploading without them")
+            body.pop("localizations")
+            resp = insert("snippet,status")
+    else:
+        resp = insert("snippet,status")
     vid = resp["id"]
     link = f"https://youtu.be/{vid}" if FILM else f"https://youtube.com/shorts/{vid}"
     print(f"Uploaded as {resp['status']['privacyStatus']}: {link}")
@@ -1093,7 +1218,10 @@ def main() -> int:
     final, thumb = OUT / "short.mp4", OUT / "thumbnail.jpg"
     shutil.move(video, final)
     shutil.move(OUT / "work" / "thumbnail.jpg", thumb)
-    meta = build_metadata(sb, report)
+    meta = build_metadata(sb, report, genre)
+    main_text = sb["description"].strip()
+    if meta["description"].startswith(main_text):
+        meta["localizations"] = localize(meta["title"], main_text, meta["description"][len(main_text):])
     (OUT / "metadata.json").write_text(json.dumps({**meta, "report": report}, indent=2, ensure_ascii=False),
                                        encoding="utf-8")
     (OUT / "social.txt").write_text(f"{meta['title']}\n\n{meta['social_caption']}\n", encoding="utf-8")

@@ -73,6 +73,13 @@ Run one now: **Actions → Silent Stories - Publish Short → Run workflow → f
 2. **Structured shots:** every scene is labelled data: shot type, action, cast, location, lighting and camera move. It becomes a labelled prompt that repeats the exact saved descriptions.
 3. **One colour grade per film** (warm, cool, teal-orange, golden, muted or noir) is applied to every shot so they cut together.
 
+## Growth features
+- **8 languages:** each upload carries its title and description in Spanish, Portuguese, Hindi, Indonesian, Arabic, French, German and Japanese (YouTube localizations). Viewers see them in their own language; the videos have no speech, so this removes the last language barrier. Change the list with the `YT_LANGUAGES` variable (e.g. `es,pt,hi`), empty = English only.
+- **Loop-friendly Shorts:** the first frame is the hook image (no fade from black) and the Short ends on its last image with the closing line, not a black card, so replays loop smoothly. The final shot echoes the first.
+- **Learns from your stats:** when new ideas are generated, the AI sees your most and least viewed uploads (read-only YouTube access, 1 quota unit) and leans toward what your audience watches.
+- **Right category:** explainers and facts upload as *Education*, stories as *Film & Animation* (override with `YT_CATEGORY`).
+- **Self-repairing storyboards:** an incomplete AI answer is repaired or asked for again instead of failing the run.
+
 ## Watermark
 Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on Shorts, clear of the Shorts buttons; bottom-right on films). Change it with the `WATERMARK` variable (empty = none). For YouTube's clickable *subscribe* watermark, also upload your logo in YouTube Studio → Customisation → Branding → Video watermark.
 
@@ -92,6 +99,7 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 | `CHANNEL_NAME` | `DiscoveryMosti` (shown on end card) |
 | `CHANNEL_HASHTAG` | `#DiscoveryMosti` |
 | `WATERMARK` | `DiscoveryMosti` |
+| `YT_LANGUAGES` | `es,pt,hi,id,ar,fr,de,ja` (translated titles/descriptions) |
 | `MAX_FALLBACK_SCENES` | `2` for Shorts, `4` for films: skip the upload if more scenes than this end up as plain gradient filler |
 
 ## Copyright-safe by design
