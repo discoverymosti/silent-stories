@@ -128,7 +128,7 @@ If the main provider is busy or out of free quota, the next one takes over autom
 
 | Secret | Used for | Where to get it (free) |
 |---|---|---|
-| `GROQ_API_KEY` | story text (fast Llama) | console.groq.com → API Keys |
+| `GROQ_API_KEY` | story text backup (fast GPT-OSS 120B / Qwen) | console.groq.com → API Keys |
 | `OPENROUTER_API_KEY` | story text (only `:free` models) | openrouter.ai → Keys |
 | `HF_TOKEN` | images (FLUX, small monthly free credits) | huggingface.co → Settings → Access Tokens (Read) |
 | `TOGETHER_API_KEY` | images (`FLUX.1-schnell-Free`) | api.together.ai → API Keys |

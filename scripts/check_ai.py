@@ -28,8 +28,21 @@ else:
     rows.append(("text", "gemini", "no key"))
 rows += [("text", name, f"no key ({env})") for name, _, env, _ in p.FREE_TEXT_PROVIDERS if not os.getenv(env)]
 for name, url, key, models in p.text_providers():
-    ok = p.ask_openai_compatible(name, url, key, models, PROMPT)
-    rows.append(("text", name, "OK" if ok else "FAIL (see log above)"))
+    if name not in ("groq", "openrouter"):
+        ok = p.ask_openai_compatible(name, url, key, models, PROMPT)
+        rows.append(("text", name, "OK" if ok else "FAIL (see log above)"))
+    else:  # these retire models often: test each listed model, then show what the key offers now
+        for m in models:
+            ok = p.ask_openai_compatible(name, url, key, [m], PROMPT)
+            rows.append(("text", f"{name}/{m}", "OK" if ok else "FAIL (see log above)"))
+        try:
+            r = requests.get(url.replace("/chat/completions", "/models"),
+                             headers={"Authorization": f"Bearer {key}"}, timeout=60)
+            ids = sorted(m.get("id", "") for m in r.json().get("data") or [])
+            ids = [i for i in ids if name != "openrouter" or i.endswith(":free")]
+            print(f"\n{name} models ({r.status_code}): {', '.join(ids)}\n")
+        except Exception as e:  # noqa: BLE001 - a probe must never fail the check
+            print(f"{name} model listing failed: {e}")
 
 check_images = os.getenv("CHECK_IMAGES", "true").lower() == "true"
 tmp = Path(tempfile.mkdtemp())
