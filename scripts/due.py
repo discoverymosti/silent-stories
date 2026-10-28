@@ -12,7 +12,7 @@ Writes go=true|false and format=short|film to $GITHUB_OUTPUT.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 DONE = Path(__file__).resolve().parent.parent / "done.txt"
@@ -40,23 +40,56 @@ def last_upload(fmt: str) -> datetime | None:
     return None
 
 
-def decide(now: datetime, event: str, manual_format: str) -> tuple[bool, str, str]:
+def _cron_values(field: str, lo: int, hi: int) -> set[int]:
+    out: set[int] = set()
+    for part in field.split(","):
+        if part == "*":
+            out |= set(range(lo, hi + 1))
+        elif "-" in part:
+            a, b = part.split("-")
+            out |= set(range(int(a), int(b) + 1))
+        else:
+            out.add(int(part))
+    return out
+
+
+def planned_time(cron: str, now: datetime) -> datetime | None:
+    """When a scheduled run was meant to start. GitHub has been starting scheduled runs 4-5+ hours
+    late (Oct 2026), so a late try must count for the window it was planned for, not the one it
+    lands in. Supports the 'M H * * DOW' crons used in publish.yml."""
+    try:
+        minute, hours, _, _, dows = cron.split()
+        hour_set, dow_set = _cron_values(hours, 0, 23), _cron_values(dows, 0, 6)
+        t = now.replace(minute=int(minute), second=0, microsecond=0)
+    except (ValueError, AttributeError):
+        return None
+    for back in range(0, 30):  # the latest matching time in the last 30 hours
+        c = t - timedelta(hours=back)
+        if c <= now and c.hour in hour_set and (c.weekday() + 1) % 7 in dow_set:
+            return c
+    return None
+
+
+def decide(now: datetime, event: str, manual_format: str, schedule: str = "") -> tuple[bool, str, str]:
     if event not in ("schedule", "repository_dispatch"):
         return True, manual_format or "short", "manual run"
+    when = (planned_time(schedule, now) if event == "schedule" else None) or now
+    late = f", started {(now - when).total_seconds() / 3600:.1f} h late" if now - when > timedelta(minutes=30) else ""
     for fmt in ("film", "short"):  # on Sunday evening the film goes first, the Short after it
         for start, end, days in WINDOWS[fmt]:
-            if now.weekday() not in days or not start <= now.hour < end:
+            if when.weekday() not in days or not start <= when.hour < end:
                 continue
-            opened = now.replace(hour=start, minute=0, second=0, microsecond=0)
+            opened = when.replace(hour=start, minute=0, second=0, microsecond=0)
             last = last_upload(fmt)
             if last and last >= opened:
                 break  # this window's video is already up
-            return True, fmt, f"{fmt} due ({start:02d}:00-{end:02d}:00 UTC window)"
-    return False, "short", "nothing due right now (outside a window, or this window's video is already up)"
+            return True, fmt, f"{fmt} due ({start:02d}:00-{end:02d}:00 UTC window{late})"
+    return False, "short", f"nothing due (outside a window, or this window's video is already up{late})"
 
 
 def main() -> None:
-    go, fmt, why = decide(datetime.now(timezone.utc), os.getenv("EVENT", ""), os.getenv("MANUAL_FORMAT", ""))
+    go, fmt, why = decide(datetime.now(timezone.utc), os.getenv("EVENT", ""), os.getenv("MANUAL_FORMAT", ""),
+                          os.getenv("SCHEDULE", ""))
     print(f"{'GO' if go else 'SKIP'}: {why}")
     if os.getenv("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:

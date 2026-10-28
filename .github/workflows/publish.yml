@@ -49,6 +49,7 @@ jobs:
         id: due
         env:
           EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
           MANUAL_FORMAT: ${{ inputs.format }}
         run: python3 scripts/due.py
 
