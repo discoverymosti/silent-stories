@@ -120,7 +120,7 @@ jobs:
 
       - name: Keep video as downloadable artifact
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: short-${{ github.run_number }}
           path: |
