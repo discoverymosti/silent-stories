@@ -1,18 +1,20 @@
 name: Silent Stories - Publish Short
 # what each run did, readable in the Actions list (test previews never upload)
-run-name: "${{ github.event_name == 'schedule' && ((github.event.schedule == '10 16 * * 0' || github.event.schedule == '10 18 * * 0') && 'Scheduled upload: weekly film' || 'Scheduled upload: Short') || (inputs.skip_upload && format('Preview only, no upload: {0}', inputs.format) || format('Upload to YouTube: {0}', inputs.format)) }}"
+run-name: "${{ (github.event_name == 'schedule' || github.event_name == 'repository_dispatch') && 'Automatic: uploads only if a video is due' || (inputs.skip_upload && format('Preview only, no upload: {0}', inputs.format) || format('Upload to YouTube: {0}', inputs.format)) }}"
 
 on:
   schedule:
-    # times are UTC, chosen for a worldwide audience (evening in Asia/Europe, morning/noon in the Americas)
-    - cron: "40 14 * * *"   # every day 14:40 UTC: vertical Short (20:10 IST, 15:40 CET, 10:40 New York)
-    - cron: "40 1 * * 1-6"  # Mon-Sat 01:40 UTC: 2nd Short (skipped Sundays to keep the film within the free image budget)
-    - cron: "10 16 * * 0"   # every Sunday 16:10 UTC: weekly widescreen short film (12:10 New York)
-    # catch-up runs: GitHub can delay or drop scheduled runs under load. Every scheduled run
-    # skips if the same format was uploaded in the last 4 h, so these only fill a missed slot.
-    - cron: "40 3 * * 1-6"
-    - cron: "40 16 * * *"
-    - cron: "10 18 * * 0"
+    # GitHub starts scheduled runs late or drops them when busy, so every publishing window gets
+    # several tries an hour apart. scripts/due.py lets the first one that runs make the video and
+    # the rest stop within seconds: one video per window. Windows (UTC), chosen for a worldwide
+    # audience: Shorts 01-07 Mon-Sat and 14-20 daily, weekly film Sunday 16-22.
+    - cron: "40 1-5 * * 1-6"
+    - cron: "40 14-19 * * *"
+    - cron: "10 16-21 * * 0"
+  # optional exact timer: any free cron service can POST a "publish-tick" repository_dispatch
+  # (see README); it is treated like a scheduled try
+  repository_dispatch:
+    types: [publish-tick]
   workflow_dispatch:
     inputs:
       skip_upload:
@@ -43,12 +45,21 @@ jobs:
           # re-run job then uses the latest code and sees the latest story queue / uploads
           ref: ${{ github.ref_name }}
 
+      - name: Is a video due?
+        id: due
+        env:
+          EVENT: ${{ github.event_name }}
+          MANUAL_FORMAT: ${{ inputs.format }}
+        run: python3 scripts/due.py
+
       - uses: actions/setup-python@v6
+        if: steps.due.outputs.go == 'true'
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install ffmpeg + fonts
+        if: steps.due.outputs.go == 'true'
         timeout-minutes: 8
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -79,9 +90,11 @@ jobs:
           ffmpeg -hide_banner -filters | grep -q " ass " && echo "ffmpeg ready"
 
       - name: Install Python deps
+        if: steps.due.outputs.go == 'true'
         run: pip install -r requirements.txt
 
       - name: Make the Short
+        if: steps.due.outputs.go == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -105,15 +118,14 @@ jobs:
           YT_PRIVACY: ${{ vars.YT_PRIVACY || 'private' }}
           CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'DiscoveryMosti' }}
           CHANNEL_HASHTAG: ${{ vars.CHANNEL_HASHTAG || '#DiscoveryMosti' }}
-          VIDEO_FORMAT: ${{ ((github.event.schedule == '10 16 * * 0' || github.event.schedule == '10 18 * * 0') && 'film') || inputs.format || 'short' }}
-          SKIP_IF_UPLOADED_WITHIN_HOURS: ${{ github.event_name == 'schedule' && '4' || '0' }}
+          VIDEO_FORMAT: ${{ steps.due.outputs.format }}
           WATERMARK: ${{ vars.WATERMARK || 'DiscoveryMosti' }}
           FREE_ONLY: ${{ vars.FREE_ONLY || 'true' }}
           SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_upload || 'false' }}
         run: python scripts/pipeline.py
 
       - name: Cross-post to Instagram, Facebook and X
-        if: success() && !(github.event_name == 'workflow_dispatch' && inputs.skip_upload)
+        if: success() && steps.due.outputs.go == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.skip_upload)
         continue-on-error: true
         env:
           YT_PRIVACY: ${{ vars.YT_PRIVACY || 'private' }}
@@ -125,7 +137,7 @@ jobs:
         run: python scripts/crosspost.py
 
       - name: Keep video as downloadable artifact
-        if: always()
+        if: always() && steps.due.outputs.go == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: short-${{ github.run_number }}
@@ -139,6 +151,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Update story queue
+        if: steps.due.outputs.go == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
