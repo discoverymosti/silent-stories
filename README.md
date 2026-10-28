@@ -130,8 +130,8 @@ If the main provider is busy or out of free quota, the next one takes over autom
 | `OPENROUTER_API_KEY` | story text (only `:free` models) | openrouter.ai → Keys |
 | `HF_TOKEN` | images (FLUX, small monthly free credits) | huggingface.co → Settings → Access Tokens (Read) |
 | `TOGETHER_API_KEY` | images (`FLUX.1-schnell-Free`) | api.together.ai → API Keys |
-| `POLLINATIONS_TOKEN` | images |
-| `AI_HORDE_KEY` *(optional)* | images: priority on AI Horde's free community GPUs (works without a key too) | aihorde.net → Register (free) | auth.pollinations.ai |
+| `POLLINATIONS_TOKEN` | images and text (daily free allowance; without a token only ~1 image) | pollinations.ai → sign in → API token |
+| `AI_HORDE_KEY` | images: queue priority on AI Horde's free community GPUs (works without a key too) | aihorde.net → Register (free) |
 
 Built in, no signup: **Pollinations** text and images, and **Cloudflare text models** (reuse your Cloudflare key, last resort because they share the image allowance). Gemini tries Flash, Flash-Lite and Pro models, each with its own free quota.
 
