@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -82,7 +83,25 @@ def mark_done(idea: str, video_id: str | None) -> None:
     STORIES.write_text("\n".join(kept).rstrip() + "\n", encoding="utf-8")
     with DONE.open("a", encoding="utf-8") as f:
         base = "https://youtu.be/" if FILM else "https://youtube.com/shorts/"
-        f.write(f"{idea} | {(base + video_id) if video_id else 'not uploaded'}\n")
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+        f.write(f"{idea} | {(base + video_id) if video_id else 'not uploaded'} | {stamp} | {FORMAT}\n")
+
+
+def uploaded_within(hours: float) -> bool:
+    """True if a video of this format was uploaded in the last `hours` (done.txt timestamps)."""
+    if not DONE.exists():
+        return False
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    for line in reversed(DONE.read_text(encoding="utf-8").splitlines()):
+        parts = [x.strip() for x in line.split(" | ")]
+        if len(parts) < 4 or parts[-1] != FORMAT or not parts[-3].startswith("http"):
+            continue
+        try:
+            when = datetime.strptime(parts[-2], "%Y-%m-%dT%H:%MZ").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        return when >= since  # newest upload of this format decides
+    return False
 
 
 REFILL_PROMPT = """You plan content for "{channel}", a worldwide YouTube channel of SILENT stories:
@@ -117,7 +136,7 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
     except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
         print(f"  could not refill {STORIES.name}: {e}")
         return
-    new = [f"{(i.get('genre') or 'story').strip().lower()} | {' '.join(str(i['idea']).split())}"
+    new = [f"{(i.get('genre') or 'story').strip().lower()} | {' '.join(str(i['idea']).replace('|', '/').split())}"
            for i in ideas if isinstance(i, dict) and i.get("idea")]
     if new:
         STORIES.write_text("\n".join(lines).rstrip() + "\n" + "\n".join(new) + "\n", encoding="utf-8")
@@ -1051,6 +1070,12 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
 # ================================================================ main
 
 def main() -> int:
+    # Scheduled runs skip if this format was uploaded in the last few hours. With a catch-up
+    # cron 2 h after each slot, a run GitHub delayed or dropped is made up for, never doubled.
+    recent = float(os.getenv("SKIP_IF_UPLOADED_WITHIN_HOURS") or 0)
+    if recent > 0 and uploaded_within(recent):
+        print(f"A {FORMAT} was already uploaded in the last {recent:g} h - nothing to do.")
+        return 0
     refill_queue()
     item = next_story()
     if not item:
