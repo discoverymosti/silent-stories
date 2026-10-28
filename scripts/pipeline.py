@@ -681,6 +681,98 @@ def gen_image_pollinations(prompt: str, dest: Path, seed: int) -> bool:
     return False
 
 
+# AI Horde: free community GPUs (aihorde.net), no signup. Slow per image, so every image the fast
+# sources couldn't make is sent at once and they run in parallel. Only models whose licence allows
+# commercial use, and one model per video so the style stays consistent.
+HORDE = "https://aihorde.net/api/v2"
+HORDE_PARALLEL = int(os.getenv("AI_HORDE_PARALLEL", "4"))
+HORDE_MODELS = [  # best first: (name, sampler settings)
+    ("Z-Image-Turbo", {"sampler_name": "k_euler", "cfg_scale": 1.0, "steps": 8}),             # Apache-2.0
+    ("Flux.1-Schnell fp8 (Compact)", {"sampler_name": "k_euler", "cfg_scale": 1.0, "steps": 4}),  # Apache-2.0
+    ("AlbedoBase XL 3.1", {"sampler_name": "k_dpmpp_2m", "cfg_scale": 5.0, "steps": 25}),     # OpenRAIL++
+    ("SDXL 1.0", {"sampler_name": "k_dpmpp_2m", "cfg_scale": 6.0, "steps": 25}),              # OpenRAIL++
+]
+
+
+def _horde_headers() -> dict:
+    # anonymous key works; a free account key (AI_HORDE_KEY) gets queue priority
+    return {"apikey": os.getenv("AI_HORDE_KEY") or "0000000000",
+            "Client-Agent": "silent-stories:1.0:github.com/discoverymosti/silent-stories"}
+
+
+def _horde_fetch(job_id: str, dest: Path, hdr: dict) -> bool:
+    try:
+        gens = requests.get(f"{HORDE}/generate/status/{job_id}", headers=hdr, timeout=60).json().get("generations") or []
+        if not gens or gens[0].get("censored") or not gens[0].get("img"):
+            return False
+        img = requests.get(gens[0]["img"], timeout=120)
+        img.raise_for_status()
+    except (requests.RequestException, ValueError):
+        return False
+    raw = dest.with_suffix(".webp")
+    raw.write_bytes(img.content)
+    try:
+        ff("-i", str(raw), str(dest))
+    except subprocess.CalledProcessError:
+        return False
+    return dest.exists()
+
+
+def horde_batch(jobs: dict, minutes: float) -> set:
+    """jobs = {key: (prompt, dest)}: generate on AI Horde, a few at a time. Returns the keys done."""
+    if not jobs or os.getenv("AI_HORDE", "true") == "false":
+        return set()
+    hdr = _horde_headers()
+    try:
+        online = {m["name"]: m for m in requests.get(f"{HORDE}/status/models", params={"type": "image"},
+                                                     headers=hdr, timeout=60).json()}
+    except (requests.RequestException, ValueError, KeyError, TypeError) as e:
+        print(f"  AI Horde unreachable: {e}")
+        return set()
+    usable = [(n, prm) for n, prm in HORDE_MODELS
+              if online.get(n, {}).get("count", 0) > 0 and online[n].get("eta", 99999) < 900]
+    if not usable:
+        print("  AI Horde: no suitable model online right now")
+        return set()
+    model, params = usable[0]
+    w, h = (1152, 640) if FILM else (640, 1152)  # within the anonymous size limit
+    print(f"  AI Horde: {len(jobs)} image(s) on {model} (free community GPUs, can take several minutes)")
+    pending, active, done = list(jobs), {}, set()
+    deadline = time.time() + minutes * 60
+    while (pending or active) and time.time() < deadline:
+        while pending and len(active) < HORDE_PARALLEL:
+            key, job_id, status = pending[0], None, None
+            try:
+                r = requests.post(f"{HORDE}/generate/async", headers=hdr, timeout=60, json={
+                    "prompt": jobs[key][0][:1000], "params": {**params, "width": w, "height": h, "n": 1},
+                    "models": [model], "nsfw": False, "censor_nsfw": True, "r2": True, "slow_workers": True})
+                status = r.status_code
+                job_id = r.json().get("id") if status in (200, 202) else None
+            except (requests.RequestException, ValueError):
+                pass
+            if not job_id:
+                print(f"    AI Horde refused a request ({status}); trying again shortly")
+                break  # e.g. too many requests at once: wait for running ones
+            active[pending.pop(0)] = job_id
+        time.sleep(10)
+        for key, job_id in list(active.items()):
+            try:
+                chk = requests.get(f"{HORDE}/generate/check/{job_id}", headers=hdr, timeout=60).json()
+            except (requests.RequestException, ValueError):
+                continue
+            if chk.get("done") or chk.get("faulted") or chk.get("is_possible") is False:
+                del active[key]
+                if _horde_fetch(job_id, jobs[key][1], hdr):
+                    done.add(key)
+    for job_id in active.values():  # out of time: cancel so the volunteers' queue is freed
+        try:
+            requests.delete(f"{HORDE}/generate/status/{job_id}", headers=hdr, timeout=30)
+        except requests.RequestException:
+            pass
+    print(f"  AI Horde: {len(done)}/{len(jobs)} image(s) ready")
+    return done
+
+
 def gen_image(prompt: str, dest: Path, seed: int) -> str | None:
     if dest.exists():
         return "cached"
@@ -997,19 +1089,29 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
         end_card(intro_len, intro)
         parts.append(intro)
         lengths.append(intro_len)
+    scenes = sb["scenes"]
+    imgs = [work / f"img_{i:02d}.png" for i in range(len(scenes))]
+    thumb_img = work / "thumb_src.png"
+    sources: dict = {}
+    if VISUAL_MODE == "ai":  # all images first: fast sources one by one, then AI Horde in one batch
+        for i, s in enumerate(scenes):
+            sources[i] = gen_image(full_prompt(sb, s), imgs[i], base_seed + i)
+        if sb.get("thumbnail_prompt"):
+            sources["thumb"] = gen_image(full_prompt(sb, sb["thumbnail_prompt"]), thumb_img, base_seed + 999)
+        missing = {k: (full_prompt(sb, scenes[k] if k != "thumb" else sb["thumbnail_prompt"]),
+                       imgs[k] if k != "thumb" else thumb_img) for k, v in sources.items() if not v}
+        for k in horde_batch(missing, minutes=45 if FILM else 30):
+            sources[k] = "ai-horde"
     hold = 0.0 if FILM else 2.8  # Shorts hold the last image for the closing line instead of a black card
-    for i, s in enumerate(sb["scenes"]):
+    for i, s in enumerate(scenes):
         L = s["seconds"] + XF  # extra overlap for crossfade
-        if i == len(sb["scenes"]) - 1:
+        if i == len(scenes) - 1:
             L += hold
         part = work / f"scene_{i:02d}.mp4"
-        img = work / f"img_{i:02d}.png"
         raw = work / f"raw_{i:02d}.mp4"
-        src = None
-        if VISUAL_MODE == "ai":
-            src = gen_image(full_prompt(sb, s), img, base_seed + i)
+        src = sources.get(i)
         if src:
-            kenburns(img, L, s["camera"], part)
+            kenburns(imgs[i], L, s["camera"], part)
             report["ai"] += 1
         elif fetch_clip(s["query"], raw, used):
             clip_scene(raw, L, part)
@@ -1044,12 +1146,8 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}" + (f":fontsdir={FONTS_DIR}" if FONTS_DIR else "") + watermark_filter(), *ENC,
        "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(final))
 
-    thumb_img = work / "thumb_src.png"
-    if VISUAL_MODE == "ai" and sb.get("thumbnail_prompt"):
-        if not gen_image(full_prompt(sb, sb["thumbnail_prompt"]), thumb_img, base_seed + 999):
-            thumb_img = work / "img_00.png"
-    else:
-        thumb_img = work / "img_00.png"
+    if not (sources.get("thumb") and thumb_img.exists()):
+        thumb_img = imgs[0]
     try:
         make_thumbnail(sb, thumb_img if thumb_img.exists() else None, work / "thumbnail.jpg")
     except subprocess.CalledProcessError as e:
