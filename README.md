@@ -79,6 +79,7 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 ## Daily use
 - **Ideas refill themselves:** when `stories.txt` drops below 5 ideas (or `films.txt` below 2), the AI adds fresh original ones that don't repeat past videos. You can still **add your own** (`genre | idea`), editing on github.com works fine. Each upload removes the top line and logs the link in `done.txt`.
 - **Better music:** drop royalty-free mp3s in `music/` (see `music/README.md`). Without them, a generated ambient pad is used.
+- **Never misses, never doubles:** GitHub can delay or drop scheduled runs when it is busy, so each slot has a catch-up run 2 hours later. Every scheduled run first checks `done.txt` and skips if the same kind of video was uploaded in the last 4 hours.
 - **Change schedule:** edit the `cron` line in `.github/workflows/publish.yml` (times are UTC; `40 14` = 14:40 UTC, `10 16 * * 0` = Sunday film).
 
 ## Optional variables
