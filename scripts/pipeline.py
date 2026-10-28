@@ -576,7 +576,9 @@ def gen_image_cloudflare(prompt: str, dest: Path, seed: int) -> bool:
         "prompt": f"{prompt} Centered composition, subject in the middle third."[:2048], "steps": 4}}))
     for model, body in attempts:
         try:
-            r = requests.post(f"{base}/{model}", headers={"Authorization": f"Bearer {token}"}, timeout=120, **body)
+            # klein sometimes needs more than 2 minutes when Cloudflare is busy (4 of 11 timed out at 120 s)
+            r = requests.post(f"{base}/{model}", headers={"Authorization": f"Bearer {token}"},
+                              timeout=180 if "flux-2" in model else 120, **body)
         except requests.RequestException as e:
             print(f"    cloudflare {model.rsplit('/', 1)[-1]} error: {e}")
             continue
