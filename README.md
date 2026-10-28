@@ -132,7 +132,9 @@ If the main provider is busy or out of free quota, the next one takes over autom
 | `TOGETHER_API_KEY` | images (`FLUX.1-schnell-Free`) | api.together.ai → API Keys |
 | `POLLINATIONS_TOKEN` | images | auth.pollinations.ai |
 
-Order: text = Gemini → Groq → OpenRouter; images = Cloudflare → Hugging Face → Together → Pollinations → (stock footage if `PIXABAY_API_KEY`/`PEXELS_API_KEY`). Run **Actions → Check free AI providers** to see which ones work.
+Built in, no signup: **Pollinations** text and images, and **Cloudflare text models** (reuse your Cloudflare key, last resort because they share the image allowance). Gemini tries Flash, Flash-Lite and Pro models, each with its own free quota.
+
+Order: text = Gemini → Groq → OpenRouter → Pollinations → Cloudflare; images = Cloudflare **FLUX.2 [klein] 4B** (true 9:16 / 16:9 frames; FLUX.1 [schnell] if klein refuses a prompt) → Hugging Face → Together → Pollinations → (stock footage if `PIXABAY_API_KEY`/`PEXELS_API_KEY`). Run **Actions → Check free AI providers** to see which ones work.
 
 **Free-only mode is ON by default** (`FREE_ONLY` variable, default `true`): the pipeline never calls Gemini image generation or the Claude API, the only two paths here that can bill. Cloudflare's free plan simply stops for the day at its limit (the video waits for tomorrow, nothing is charged), and GitHub, YouTube and Google sign-in are free. Keep it this way for a guaranteed ₹0.
 

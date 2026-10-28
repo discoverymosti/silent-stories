@@ -556,33 +556,40 @@ def gen_image_gemini(prompt: str, dest: Path) -> bool:
 _cf_ok = True
 
 
+CF_IMAGE_MODEL = os.getenv("CF_IMAGE_MODEL", "@cf/black-forest-labs/flux-2-klein-4b")
+
+
 def gen_image_cloudflare(prompt: str, dest: Path, seed: int) -> bool:
-    """Cloudflare Workers AI FLUX.1 schnell (free daily allowance)."""
+    """Cloudflare Workers AI (free daily allowance): FLUX.2 [klein] 4B at the true frame shape,
+    falling back to FLUX.1 [schnell] (square, cropped by the edit) if klein refuses a prompt."""
     global _cf_ok
     acct, token = os.getenv("CF_ACCOUNT_ID"), os.getenv("CF_API_TOKEN")
     if not (_cf_ok and acct and token):
         return False
-    try:
-        r = requests.post(
-            f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/@cf/black-forest-labs/flux-1-schnell",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"prompt": f"{prompt} Centered composition, subject in the middle third."[:2048],
-                  "steps": 4},  # schnell's native step count; cost scales with steps
-            timeout=120,
-        )
-    except requests.RequestException as e:
-        print(f"    cloudflare error: {e}")
-        return False
-    if r.status_code != 200:
-        print(f"    cloudflare {r.status_code}: {r.text[:200]}")
+    base = f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run"
+    w, h = _gen_size()
+    attempts = []
+    if "flux-2" in CF_IMAGE_MODEL:  # FLUX.2 models take multipart form fields, steps fixed at 4
+        attempts.append((CF_IMAGE_MODEL, {"files": {"prompt": (None, prompt[:2048]),
+                                                    "width": (None, str(w)), "height": (None, str(h))}}))
+    attempts.append(("@cf/black-forest-labs/flux-1-schnell", {"json": {
+        "prompt": f"{prompt} Centered composition, subject in the middle third."[:2048], "steps": 4}}))
+    for model, body in attempts:
+        try:
+            r = requests.post(f"{base}/{model}", headers={"Authorization": f"Bearer {token}"}, timeout=120, **body)
+        except requests.RequestException as e:
+            print(f"    cloudflare {model.rsplit('/', 1)[-1]} error: {e}")
+            continue
+        if r.status_code == 200:
+            data = (r.json().get("result") or {}).get("image")
+            if data:
+                dest.write_bytes(base64.b64decode(data))
+                return True
+        print(f"    cloudflare {model.rsplit('/', 1)[-1]} {r.status_code}: {r.text[:200]}")
         if r.status_code in (401, 403, 429):
             _cf_ok = False  # bad token or daily allowance used up: stop trying this run
-        return False
-    data = (r.json().get("result") or {}).get("image")
-    if not data:
-        return False
-    dest.write_bytes(base64.b64decode(data))
-    return True
+            return False
+    return False
 
 
 # free image backups (each optional, each stops itself for the run on auth/quota errors)
