@@ -33,7 +33,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 150   # a film whose images all come from AI Horde's queue can take ~2 h
     steps:
       - uses: actions/checkout@v5
 

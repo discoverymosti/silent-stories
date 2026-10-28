@@ -1100,7 +1100,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
             sources["thumb"] = gen_image(full_prompt(sb, sb["thumbnail_prompt"]), thumb_img, base_seed + 999)
         missing = {k: (full_prompt(sb, scenes[k] if k != "thumb" else sb["thumbnail_prompt"]),
                        imgs[k] if k != "thumb" else thumb_img) for k, v in sources.items() if not v}
-        for k in horde_batch(missing, minutes=45 if FILM else 30):
+        for k in horde_batch(missing, minutes=65 if FILM else 30):
             sources[k] = "ai-horde"
     hold = 0.0 if FILM else 2.8  # Shorts hold the last image for the closing line instead of a black card
     for i, s in enumerate(scenes):
