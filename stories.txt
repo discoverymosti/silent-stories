@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | A father secretly skips his own lunch every day so his daughter can buy hers; years later she notices
 fact | Why the ocean is salty: rivers carry minerals for millions of years and the sea never lets them go
 story | A street dog follows a delivery rider every morning until one rainy day the rider finally stops
 explainer | How a seed becomes a tree: from one small seed to a forest, step by step
