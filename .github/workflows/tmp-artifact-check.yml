@@ -1,0 +1,19 @@
+name: tmp artifact action check
+on:
+  push:
+    branches: [claude/exciting-archimedes-k4fl7w]
+    paths: [.github/workflows/tmp-artifact-check.yml]
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: mkdir -p out && echo ok > out/metadata.json && echo ok > out/social.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tmp-check
+          path: |
+            out/short.mp4
+            out/metadata.json
+            out/social.txt
+          retention-days: 1
+          if-no-files-found: ignore
