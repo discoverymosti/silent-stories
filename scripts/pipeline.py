@@ -339,17 +339,19 @@ def ask_gemini(prompt: str) -> str:
 
 # Free OpenAI-compatible backups for the story text, tried in order when Gemini is busy or
 # out of quota. Each is used only if its key is present; all are free tiers without billing.
-#   Groq:          GROQ_API_KEY       (console.groq.com, free plan, no card)
+#   Groq:          GROQ_API_KEY       (console.groq.com, free plan, no card; run the AI check to
+#                                     see its current models - Groq retires them often)
 #   OpenRouter:    OPENROUTER_API_KEY (openrouter.ai, only ":free" models are requested)
 FREE_TEXT_PROVIDERS = [
     ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY",
-     ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]),
+     ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]),  # each has its own free daily limit
     ("openrouter", "https://openrouter.ai/api/v1/chat/completions", "OPENROUTER_API_KEY",
      ["meta-llama/llama-3.3-70b-instruct:free", "deepseek/deepseek-chat-v3-0324:free"]),
 ]
 
 
 def _strip_fences(text: str) -> str:
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)  # reasoning models (Qwen) may think out loud first
     return re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
 
 

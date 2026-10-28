@@ -28,9 +28,13 @@ else:
     rows.append(("text", "gemini", "no key"))
 rows += [("text", name, f"no key ({env})") for name, _, env, _ in p.FREE_TEXT_PROVIDERS if not os.getenv(env)]
 for name, url, key, models in p.text_providers():
-    ok = p.ask_openai_compatible(name, url, key, models, PROMPT)
-    rows.append(("text", name, "OK" if ok else "FAIL (see log above)"))
-    if name in ("groq", "openrouter"):  # which models does the key offer right now? (they retire models often)
+    if name not in ("groq", "openrouter"):
+        ok = p.ask_openai_compatible(name, url, key, models, PROMPT)
+        rows.append(("text", name, "OK" if ok else "FAIL (see log above)"))
+    else:  # these retire models often: test each listed model, then show what the key offers now
+        for m in models:
+            ok = p.ask_openai_compatible(name, url, key, [m], PROMPT)
+            rows.append(("text", f"{name}/{m}", "OK" if ok else "FAIL (see log above)"))
         try:
             r = requests.get(url.replace("/chat/completions", "/models"),
                              headers={"Authorization": f"Bearer {key}"}, timeout=60)
