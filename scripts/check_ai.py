@@ -65,6 +65,7 @@ if acct and token:
             r = requests.post(f"{base}/run/{m}", headers=auth, timeout=180,
                               files={"prompt": (None, prompt), "width": (None, str(w)), "height": (None, str(h))})
             if r.status_code != 200:  # some models take JSON instead of multipart
+                print(f"  {m} multipart -> {r.status_code}: {r.text[:200]}")
                 r = requests.post(f"{base}/run/{m}", headers=auth, timeout=180,
                                   json={"prompt": prompt, "width": w, "height": h})
             img = None
@@ -74,6 +75,15 @@ if acct and token:
                 img = base64.b64encode(r.content).decode()
             rows.append(("image", m, f"OK ({len(base64.b64decode(img)) // 1024} KB, {w}x{h} asked)" if img
                          else f"FAIL {r.status_code}: {r.text[:120]}"))
+        # models listed at $0: do they work even when the daily allowance is used up?
+        for m in ("@cf/bytedance/stable-diffusion-xl-lightning", "@cf/lykon/dreamshaper-8-lcm"):
+            if not check_images:
+                continue
+            w, h = p._gen_size()
+            r = requests.post(f"{base}/run/{m}", headers=auth, timeout=180,
+                              json={"prompt": prompt, "width": w, "height": h, "num_steps": 8})
+            ok = r.status_code == 200 and r.headers.get("content-type", "").startswith("image")
+            rows.append(("image", m, f"OK ({len(r.content) // 1024} KB)" if ok else f"FAIL {r.status_code}: {r.text[:120]}"))
     except Exception as e:  # noqa: BLE001 - a probe must never fail the check
         print(f"Cloudflare model listing failed: {e}")
 
