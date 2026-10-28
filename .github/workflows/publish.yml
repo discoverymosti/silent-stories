@@ -33,7 +33,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 150   # a film whose images all come from AI Horde's queue can take ~2 h
     steps:
       - uses: actions/checkout@v5
 
@@ -91,6 +91,7 @@ jobs:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           POLLINATIONS_TOKEN: ${{ secrets.POLLINATIONS_TOKEN }}
+          AI_HORDE_KEY: ${{ secrets.AI_HORDE_KEY }}
           MAX_FALLBACK_SCENES: ${{ vars.MAX_FALLBACK_SCENES || '2' }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
