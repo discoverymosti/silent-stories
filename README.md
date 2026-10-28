@@ -73,6 +73,13 @@ Run one now: **Actions → Silent Stories - Publish Short → Run workflow → f
 2. **Structured shots:** every scene is labelled data: shot type, action, cast, location, lighting and camera move. It becomes a labelled prompt that repeats the exact saved descriptions.
 3. **One colour grade per film** (warm, cool, teal-orange, golden, muted or noir) is applied to every shot so they cut together.
 
+## Growth features
+- **8 languages:** each upload carries its title and description in Spanish, Portuguese, Hindi, Indonesian, Arabic, French, German and Japanese (YouTube localizations). Viewers see them in their own language; the videos have no speech, so this removes the last language barrier. Change the list with the `YT_LANGUAGES` variable (e.g. `es,pt,hi`), empty = English only.
+- **Loop-friendly Shorts:** the first frame is the hook image (no fade from black) and the Short ends on its last image with the closing line, not a black card, so replays loop smoothly. The final shot echoes the first.
+- **Learns from your stats:** when new ideas are generated, the AI sees your most and least viewed uploads (read-only YouTube access, 1 quota unit) and leans toward what your audience watches.
+- **Right category:** explainers and facts upload as *Education*, stories as *Film & Animation* (override with `YT_CATEGORY`).
+- **Self-repairing storyboards:** an incomplete AI answer is repaired or asked for again instead of failing the run.
+
 ## Watermark
 Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on Shorts, clear of the Shorts buttons; bottom-right on films). Change it with the `WATERMARK` variable (empty = none). For YouTube's clickable *subscribe* watermark, also upload your logo in YouTube Studio → Customisation → Branding → Video watermark.
 
@@ -92,6 +99,7 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 | `CHANNEL_NAME` | `DiscoveryMosti` (shown on end card) |
 | `CHANNEL_HASHTAG` | `#DiscoveryMosti` |
 | `WATERMARK` | `DiscoveryMosti` |
+| `YT_LANGUAGES` | `es,pt,hi,id,ar,fr,de,ja` (translated titles/descriptions) |
 | `MAX_FALLBACK_SCENES` | `2` for Shorts, `4` for films: skip the upload if more scenes than this end up as plain gradient filler |
 
 ## Copyright-safe by design
@@ -124,7 +132,9 @@ If the main provider is busy or out of free quota, the next one takes over autom
 | `TOGETHER_API_KEY` | images (`FLUX.1-schnell-Free`) | api.together.ai → API Keys |
 | `POLLINATIONS_TOKEN` | images | auth.pollinations.ai |
 
-Order: text = Gemini → Groq → OpenRouter; images = Cloudflare → Hugging Face → Together → Pollinations → (stock footage if `PIXABAY_API_KEY`/`PEXELS_API_KEY`). Run **Actions → Check free AI providers** to see which ones work.
+Built in, no signup: **Pollinations** text and images, and **Cloudflare text models** (reuse your Cloudflare key, last resort because they share the image allowance). Gemini tries Flash, Flash-Lite and Pro models, each with its own free quota.
+
+Order: text = Gemini → Groq → OpenRouter → Pollinations → Cloudflare; images = Cloudflare **FLUX.2 [klein] 4B** (true 9:16 / 16:9 frames; FLUX.1 [schnell] if klein refuses a prompt) → Hugging Face → Together → Pollinations → (stock footage if `PIXABAY_API_KEY`/`PEXELS_API_KEY`). Run **Actions → Check free AI providers** to see which ones work.
 
 **Free-only mode is ON by default** (`FREE_ONLY` variable, default `true`): the pipeline never calls Gemini image generation or the Claude API, the only two paths here that can bill. Cloudflare's free plan simply stops for the day at its limit (the video waits for tomorrow, nothing is charged), and GitHub, YouTube and Google sign-in are free. Keep it this way for a guaranteed ₹0.
 
