@@ -5,6 +5,7 @@ uses one image from that provider's free allowance.
 """
 import base64
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -86,6 +87,47 @@ if acct and token:
             rows.append(("image", m, f"OK ({len(r.content) // 1024} KB)" if ok else f"FAIL {r.status_code}: {r.text[:120]}"))
     except Exception as e:  # noqa: BLE001 - a probe must never fail the check
         print(f"Cloudflare model listing failed: {e}")
+
+# AI Horde: free community GPUs, no signup (anonymous key). Which image models are online, and how
+# long does one image take?
+if check_images and os.getenv("CHECK_HORDE", "true") == "true":
+    import time as _t
+    H = "https://aihorde.net/api/v2"
+    hdr = {"apikey": os.getenv("AI_HORDE_KEY", "0000000000"),
+           "Client-Agent": "silent-stories:1.0:github.com/discoverymosti/silent-stories"}
+    try:
+        live = requests.get(f"{H}/status/models", params={"type": "image"}, headers=hdr, timeout=60).json()
+        live = sorted(live, key=lambda m: -m.get("count", 0))
+        print("\nAI Horde image models online (workers, queued):")
+        for m in [m for m in live if re.search(r"flux|sdxl|albedo|juggernaut|realvis|z-image|qwen", m["name"], re.I)][:15]:
+            print(f"  {m['name']:45} workers={m.get('count')} queued={m.get('queued')} eta={m.get('eta')}s")
+        flux = [m["name"] for m in live if "flux" in m["name"].lower() and m.get("count", 0) > 0]
+        model = flux[0] if flux else live[0]["name"]
+        w, h = (1024, 576) if p.FILM else (576, 1024)
+        params = ({"sampler_name": "k_euler", "cfg_scale": 1.0, "steps": 4} if "flux" in model.lower()
+                  else {"sampler_name": "k_dpmpp_2m", "cfg_scale": 6.0, "steps": 24})
+        t0 = _t.time()
+        job = requests.post(f"{H}/generate/async", headers=hdr, timeout=60, json={
+            "prompt": prompt[:1000], "params": {**params, "width": w, "height": h, "n": 1},
+            "models": [model], "nsfw": False, "censor_nsfw": True, "r2": True, "slow_workers": True}).json()
+        print(f"  submitted to {model}: {str(job)[:200]}")
+        status = "FAIL: " + str(job.get("message", job))[:100]
+        if job.get("id"):
+            while _t.time() - t0 < 600:
+                chk = requests.get(f"{H}/generate/check/{job['id']}", headers=hdr, timeout=60).json()
+                if chk.get("done") or chk.get("faulted") or not chk.get("is_possible", True):
+                    break
+                _t.sleep(10)
+            res = requests.get(f"{H}/generate/status/{job['id']}", headers=hdr, timeout=60).json()
+            gens = res.get("generations") or []
+            if gens and gens[0].get("img"):
+                img = requests.get(gens[0]["img"], timeout=120)
+                status = f"OK in {round(_t.time() - t0)}s via {gens[0].get('model')} ({len(img.content) // 1024} KB)"
+            else:
+                status = f"FAIL after {round(_t.time() - t0)}s: {str(chk)[:120]}"
+        rows.append(("image", "ai-horde (no key)", status))
+    except Exception as e:  # noqa: BLE001
+        rows.append(("image", "ai-horde (no key)", f"FAIL {e}"))
 
 # Who used the Cloudflare allowance, and when? (needs Account Analytics read on the token)
 if acct and token:
