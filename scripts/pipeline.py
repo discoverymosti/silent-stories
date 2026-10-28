@@ -914,6 +914,15 @@ def clip_scene(src: Path, seconds: float, dest: Path) -> None:
     ff("-ss", "0.3", "-t", f"{seconds:.2f}", "-i", str(src), "-vf", vf, "-an", *ENC, str(dest))
 
 
+def reframe_scene(img: Path, seconds: float, idx: int, dest: Path) -> None:
+    """A missing shot rebuilt from a neighbouring image: a punch-in on another part of the frame
+    with its own camera move (a standard edit), instead of abstract filler."""
+    x, y = [("0", "0"), ("iw*0.3", "ih*0.15"), ("iw*0.15", "ih*0.3")][idx % 3]
+    crop = dest.with_suffix(".png")
+    ff("-i", str(img), "-vf", f"crop=iw*0.7:ih*0.7:{x}:{y}", str(crop))
+    kenburns(crop, seconds, CAMERA_MOVES[(idx + 2) % len(CAMERA_MOVES)], dest)
+
+
 def gradient_scene(seconds: float, dest: Path, idx: int) -> None:
     hue = (idx * 37) % 360
     vf = (f"geq=r='40+30*sin(2*PI*(X/W+T/8))':g='30+20*sin(2*PI*(Y/H+T/9))':b='60+40*cos(2*PI*(X/W-T/7))',"
@@ -1080,7 +1089,7 @@ def make_thumbnail(sb: dict, src: Path | None, dest: Path) -> None:
 def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     work.mkdir(parents=True, exist_ok=True)
     used: set[int] = set()
-    parts, lengths, report = [], [], {"ai": 0, "stock": 0, "fallback": 0}
+    parts, lengths, report = [], [], {"ai": 0, "stock": 0, "reused": 0, "fallback": 0}
     base_seed = random.randint(1, 10_000_000)
     set_grade(sb.get("grade", "teal_orange"))
     intro_len = 3.5 + XF if FILM else 0.0
@@ -1100,7 +1109,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
             sources["thumb"] = gen_image(full_prompt(sb, sb["thumbnail_prompt"]), thumb_img, base_seed + 999)
         missing = {k: (full_prompt(sb, scenes[k] if k != "thumb" else sb["thumbnail_prompt"]),
                        imgs[k] if k != "thumb" else thumb_img) for k, v in sources.items() if not v}
-        for k in horde_batch(missing, minutes=65 if FILM else 30):
+        for k in horde_batch(missing, minutes=80 if FILM else 45):
             sources[k] = "ai-horde"
     hold = 0.0 if FILM else 2.8  # Shorts hold the last image for the closing line instead of a black card
     for i, s in enumerate(scenes):
@@ -1113,10 +1122,16 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
         if src:
             kenburns(imgs[i], L, s["camera"], part)
             report["ai"] += 1
-        elif fetch_clip(s["query"], raw, used):
+        elif fetch_clip(s.get("query") or s["image_prompt"][:40], raw, used):
             clip_scene(raw, L, part)
             src = "stock"
             report["stock"] += 1
+        elif (near := next((j for d in range(1, len(scenes)) for j in (i - d, i + d)
+                            if 0 <= j < len(scenes) and sources.get(j) and imgs[j].exists()), None)) is not None \
+                and report["reused"] < max(1, len(scenes) // 4):  # at most about a quarter of the shots
+            reframe_scene(imgs[near], L, i, part)
+            src = f"reframe {near + 1}"
+            report["reused"] += 1
         else:
             gradient_scene(L, part, i)
             src = "fallback"
