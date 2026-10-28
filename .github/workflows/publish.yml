@@ -1,4 +1,6 @@
 name: Silent Stories - Publish Short
+# what each run did, readable in the Actions list (test previews never upload)
+run-name: "${{ github.event_name == 'schedule' && ((github.event.schedule == '10 16 * * 0' || github.event.schedule == '10 18 * * 0') && 'Scheduled upload: weekly film' || 'Scheduled upload: Short') || (inputs.skip_upload && format('Preview only, no upload: {0}', inputs.format) || format('Upload to YouTube: {0}', inputs.format)) }}"
 
 on:
   schedule:
@@ -36,6 +38,10 @@ jobs:
     timeout-minutes: 150   # a film whose images all come from AI Horde's queue can take ~2 h
     steps:
       - uses: actions/checkout@v5
+        with:
+          # the branch's newest commit, not the one that triggered the run: a delayed, queued or
+          # re-run job then uses the latest code and sees the latest story queue / uploads
+          ref: ${{ github.ref_name }}
 
       - uses: actions/setup-python@v6
         with:
