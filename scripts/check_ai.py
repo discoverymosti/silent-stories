@@ -87,6 +87,29 @@ if acct and token:
     except Exception as e:  # noqa: BLE001 - a probe must never fail the check
         print(f"Cloudflare model listing failed: {e}")
 
+# Who used the Cloudflare allowance, and when? (needs Account Analytics read on the token)
+if acct and token:
+    import datetime as _dt
+    today = _dt.datetime.now(_dt.timezone.utc).date()
+    query = """query ($acct: string!, $start: Date!, $end: Date!) { viewer { accounts(filter: {accountTag: $acct}) {
+      aiInferenceAdaptiveGroups(limit: 200, filter: {date_geq: $start, date_leq: $end}, orderBy: [datetimeHour_ASC]) {
+        count sum { totalNeurons } dimensions { datetimeHour modelId } } } } }"""
+    try:
+        r = requests.post("https://api.cloudflare.com/client/v4/graphql", headers={"Authorization": f"Bearer {token}"},
+                          json={"query": query, "variables": {"acct": acct, "start": str(today - _dt.timedelta(days=1)),
+                                                              "end": str(today)}}, timeout=60)
+        d = r.json()
+        if d.get("errors"):
+            print(f"\nCloudflare usage analytics unavailable: {str(d['errors'])[:300]}")
+        else:
+            groups = d["data"]["viewer"]["accounts"][0]["aiInferenceAdaptiveGroups"]
+            print("\nCloudflare Workers AI usage by hour (UTC):")
+            for g in groups:
+                print(f"  {g['dimensions']['datetimeHour']}  {g['dimensions']['modelId']:45} "
+                      f"requests={g['count']:4}  neurons={round(g['sum']['totalNeurons'])}")
+    except Exception as e:  # noqa: BLE001
+        print(f"Cloudflare usage analytics failed: {e}")
+
 print("\nFree AI providers:")
 for kind, name, status in rows:
     print(f"  {kind:5}  {name:13}  {status}")
