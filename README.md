@@ -6,7 +6,7 @@ Automated YouTube Shorts channel. **No voice, no language barrier**: stories tol
 stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI images per scene (Gemini → Cloudflare FLUX → Pollinations,
                                                stock footage fallback)
            ─► auto-edit: Ken Burns moves, crossfades, film look, captions, original music
-           ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (2 a day Mon-Sat at 01:40 and 14:40 UTC, 1 on Sunday)
+           ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (one per window: 01-07 UTC Mon-Sat and 14-20 UTC daily)
 ```
 
 ## One-time setup (≈25 min)
@@ -65,7 +65,7 @@ Nothing is cross-posted while `YT_PRIVACY` is `private`, so review uploads stay 
 3. GitHub secrets: `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_SECRET`.
 
 ## Weekly short film
-Every **Sunday 16:10 UTC** (12:10 New York, 17:10 Paris, 21:40 India) the same workflow makes a **~3 minute widescreen (16:9) silent short film**: 18-24 AI scenes in three acts, captions, original score, watermark and thumbnail. It uploads as a normal video (not a Short), from the queue in `films.txt`.
+Every **Sunday between 16:00 and 22:00 UTC** (from 12:00 New York, 17:00 Paris, 21:30 India) the same workflow makes a **~3 minute widescreen (16:9) silent short film**: 18-24 AI scenes in three acts, captions, original score, watermark and thumbnail. It uploads as a normal video (not a Short), from the queue in `films.txt`.
 Run one now: **Actions → Silent Stories - Publish Short → Run workflow → format: film**.
 
 ### How films stay consistent (film-crew workflow)
@@ -87,8 +87,9 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 ## Daily use
 - **Ideas refill themselves:** when `stories.txt` drops below 5 ideas (or `films.txt` below 2), the AI adds fresh original ones that don't repeat past videos. You can still **add your own** (`genre | idea`), editing on github.com works fine. Each upload removes the top line and logs the link in `done.txt`.
 - **Better music:** drop royalty-free mp3s in `music/` (see `music/README.md`). Without them, a generated ambient pad is used.
-- **Never misses, never doubles:** GitHub can delay or drop scheduled runs when it is busy, so each slot has a catch-up run 2 hours later. Every scheduled run first checks `done.txt` and skips if the same kind of video was uploaded in the last 4 hours.
-- **Change schedule:** edit the `cron` line in `.github/workflows/publish.yml` (times are UTC; `40 14` = 14:40 UTC, `10 16 * * 0` = Sunday film).
+- **Never misses, never doubles:** GitHub can delay or drop scheduled runs when it is busy (this repo has seen 3.5 h delays and skipped slots), so every publishing window gets 5-6 tries an hour apart. Each try first runs `scripts/due.py`, which reads `done.txt` in seconds: the first try that gets through makes the video, the others see it is up and stop. Windows (UTC): Shorts 01:00-07:00 Mon-Sat and 14:00-20:00 daily, film Sunday 16:00-22:00. In the Actions list these runs are called *"Automatic: uploads only if a video is due"*; most of them finish in seconds with nothing to do, which is normal.
+- **Exact timing (optional, free):** if GitHub keeps skipping, let a free cron service trigger the tries instead. Create a fine-grained GitHub token (Settings → Developer settings → Fine-grained tokens → only this repo → *Contents: Read and write*), then on cron-job.org add a job every hour at :40 that sends `POST https://api.github.com/repos/discoverymosti/silent-stories/dispatches` with headers `Authorization: Bearer <token>`, `Accept: application/vnd.github+json` and body `{"event_type": "publish-tick"}`. The due check still guarantees one video per window.
+- **Change windows:** edit `WINDOWS` in `scripts/due.py` and the matching `cron` lines in `.github/workflows/publish.yml` (times are UTC).
 
 ## Optional variables
 | Variable | Default |
