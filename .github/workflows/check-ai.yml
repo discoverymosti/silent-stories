@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install -q requests
+      - run: pip install -q requests anthropic
       - name: Check
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -32,4 +32,14 @@ jobs:
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
           POLLINATIONS_TOKEN: ${{ secrets.POLLINATIONS_TOKEN }}
           CHECK_IMAGES: ${{ inputs.images }}
+          # AI tier: free now, paid models only once the channel earns (README: Paid AI later)
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_TIER: ${{ vars.AI_TIER || 'auto' }}
+          PAID_MIN_REVENUE_USD: ${{ vars.PAID_MIN_REVENUE_USD }}
+          PAID_BUDGET_USD: ${{ vars.PAID_BUDGET_USD }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          FREE_ONLY: ${{ vars.FREE_ONLY }}
         run: python scripts/check_ai.py

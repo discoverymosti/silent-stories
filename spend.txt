@@ -1,0 +1,2 @@
+# Paid AI spend log, written by the pipeline: time (UTC) | model | estimated USD.
+# Free models are never logged. Monthly cap: PAID_BUDGET_USD (README: Paid AI later).

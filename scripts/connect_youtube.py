@@ -4,6 +4,7 @@ Connect your YouTube channel - run ONCE on your own computer.
 Before running:
   1. https://console.cloud.google.com -> New project "silent-stories"
   2. APIs & Services -> Library -> enable "YouTube Data API v3"
+     (and "YouTube Analytics API": lets AI_TIER=auto switch to paid AI only once the channel earns)
   3. OAuth consent screen -> External -> app name "Silent Stories" ->
      add your Gmail under Test users -> then click "PUBLISH APP"
      (in Testing mode the token dies after 7 days)
@@ -22,7 +23,8 @@ from pathlib import Path
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
-          "https://www.googleapis.com/auth/youtube.readonly"]
+          "https://www.googleapis.com/auth/youtube.readonly",
+          "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"]
 secret = Path(__file__).with_name("client_secret.json")
 if not secret.exists():
     sys.exit(f"Missing {secret}. Follow the steps at the top of this file.")

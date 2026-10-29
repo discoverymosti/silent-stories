@@ -17,7 +17,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 | Secret | Get it from | Cost |
 |---|---|---|
 | `GEMINI_API_KEY` | aistudio.google.com → Get API key | free tier |
-| `ANTHROPIC_API_KEY` *(optional, instead of Gemini)* | console.anthropic.com → API Keys | ~₹1–2 per video |
+| `ANTHROPIC_API_KEY` *(optional, paid tier only: see [Paid AI later](#paid-ai-later-switches-on-by-itself-once-the-channel-earns))* | console.anthropic.com → API Keys | ≈ $0.15–0.30 per video |
 | `CF_ACCOUNT_ID` / `CF_API_TOKEN` *(recommended: AI images when Gemini's free image quota is 0)* | dash.cloudflare.com → **Workers AI** → *Use REST API*: copy the Account ID, click *Create a Workers AI API Token* | free daily allowance |
 | `POLLINATIONS_TOKEN` *(optional)* | auth.pollinations.ai (anonymous use now returns 402) | free tier |
 | `PIXABAY_API_KEY` *(optional fallback)* | pixabay.com/api/docs (sign in, key is shown on the page) | free |
@@ -25,7 +25,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 | `YT_CLIENT_ID` / `YT_CLIENT_SECRET` / `YT_REFRESH_TOKEN` | step 2 | free |
 
 ### 2. Connect your YouTube channel
-**No computer needed:** Actions → **Connect YouTube channel** → Run workflow (leave *code* empty). Open the sign-in link from the log, tap Allow, copy the `http://localhost/?code=...` address you land on, then run the workflow again with it pasted into *code*. The log shows your channel name; the token is saved encrypted as `yt_token.enc`. (Web OAuth clients need `http://localhost` under *Authorized redirect URIs*.)
+**No computer needed:** Actions → **Connect YouTube channel** → Run workflow (leave *code* empty). Open the sign-in link from the log, tap Allow, copy the `http://localhost/?code=...` address you land on, then run the workflow again with it pasted into *code*. The log shows your channel name; the token is saved encrypted as `yt_token.enc`. (Web OAuth clients need `http://localhost` under *Authorized redirect URIs*.) If the log warns that Google will end the connection in a few days, your OAuth consent screen is still in *Testing*: Google Cloud → **OAuth consent screen → Publish app**, then connect again. Every run also checks the connection first and stops early, before using any AI quota, if it has expired.
 
 **Or on your computer:**
 ```bash
@@ -139,9 +139,25 @@ Built in, no signup: **Pollinations** text and images, and **Cloudflare text mod
 
 Order: text = Gemini → Groq → OpenRouter → Pollinations → Cloudflare; images = Cloudflare **FLUX.2 [klein] 4B** (true 9:16 / 16:9 frames; FLUX.1 [schnell] if klein refuses a prompt; the thumbnail, which decides clicks, gets the bigger **FLUX.2 [klein] 9B** - about 1,360 of the 10,000 free daily neurons, versus ~100-160 per 4B scene) → Hugging Face → Together → Pollinations → **AI Horde** (free volunteer GPUs, no signup; every image still missing is sent at once and they run in parallel, Z-Image-Turbo / FLUX.1-schnell / SDXL, commercial-use licences only) → (stock footage if `PIXABAY_API_KEY`/`PEXELS_API_KEY`). Run **Actions → Check free AI providers** to see which ones work.
 
-**Free-only mode is ON by default** (`FREE_ONLY` variable, default `true`): the pipeline never calls Gemini image generation or the Claude API, the only two paths here that can bill. Cloudflare's free plan simply stops for the day at its limit (the video waits for tomorrow, nothing is charged), and GitHub, YouTube and Google sign-in are free. Keep it this way for a guaranteed ₹0.
+**Free models only, until the channel earns.** The only paths here that can bill are Claude (writing) and Gemini pictures, and both stay off until the [paid tier](#paid-ai-later-switches-on-by-itself-once-the-channel-earns) switches on, which also needs a paid key or billing that only you can add. Cloudflare's free plan simply stops for the day at its limit (the video waits for tomorrow, nothing is charged), and GitHub, YouTube and Google sign-in are free.
 
-**What would cost money (only if you turn it on):** enabling billing on the Gemini API key (Gemini images, about $0.04/image ≈ $15-20/month for daily Shorts), Cloudflare Workers Paid ($5/month, only if you want more than ~10k neurons/day, e.g. more videos per day), making the repo **private** (GitHub Free includes 2,000 Actions minutes/month, enough for this; beyond that ~$0.008/min), or `ANTHROPIC_API_KEY` instead of Gemini (~₹1-2/video). Never add a payment method you don't intend to use.
+**What would cost money (only if you turn it on):** the paid AI tier below, Cloudflare Workers Paid ($5/month, only if you want more than ~10k neurons/day, e.g. more videos per day), or making the repo **private** (GitHub Free includes 2,000 Actions minutes/month, enough for this; beyond that ~$0.008/min). Never add a payment method you don't intend to use.
+
+### Paid AI later: switches on by itself once the channel earns
+`AI_TIER=auto` (the default) keeps every run on the free models. At the start of each run it reads the channel's YouTube earnings for the last 28 days (read-only), and only when they reach `PAID_MIN_REVENUE_USD` (default **20**) does it use the paid models below, the free ones staying as backup. If earnings drop, it goes back to free by itself. Paid use is capped at `PAID_BUDGET_USD` per calendar month (default **10**): each paid call's estimated cost is written to `spend.txt`, and at the cap the run continues on the free models until the next month. Earnings are never printed or saved, because the Actions logs of a public repository are public.
+
+| Paid model | Does | Needs (only you can add it) | Approx. cost |
+|---|---|---|---|
+| Claude Opus 5.5 | writes the ideas and stories (translations stay free) | `ANTHROPIC_API_KEY` secret with credit | ≈ $0.15–0.30 per video |
+| Gemini image model | draws the scene pictures and the thumbnail | billing on the Google Cloud project of `GEMINI_API_KEY` | ≈ $0.04–0.07 per picture (≈ $0.50–0.80 per Short) |
+
+When the channel is monetized:
+1. Google Cloud console (the project of your YouTube OAuth client) → APIs & Services → Library → enable **YouTube Analytics API**.
+2. Actions → **Connect YouTube channel**, twice as in step 2. The sign-in now also asks to *view monetary YouTube Analytics reports*: allow it.
+3. Add the `ANTHROPIC_API_KEY` secret, and set a monthly spend limit in the Anthropic Console as a second guard. Optional: enable billing for Gemini pictures, with a Google Cloud budget alert.
+4. Run **Actions → Check free AI providers**: the first row shows `AI tier PAID` or why it is still free.
+
+Variables (Settings → Secrets and variables → Actions → **Variables**): `AI_TIER` = `free` (never pay) / `auto` / `paid` (paid models now, within the budget); `PAID_MIN_REVENUE_USD`; `PAID_BUDGET_USD`; `CLAUDE_MODEL` (default `claude-opus-5-5`; `claude-fable-5-1` is Anthropic's most capable model, about 2.5× the price). `FREE_ONLY=true` is an emergency switch that forces free whatever else is set.
 
 ## Good to know
 - **Unverified API project:** YouTube may lock API uploads to *private* until your Google Cloud project passes the [YouTube API audit](https://support.google.com/youtube/contact/yt_api_form). Until then, flip each video to public in YouTube Studio (one click), or submit the audit form.

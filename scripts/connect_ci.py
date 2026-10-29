@@ -24,8 +24,11 @@ import requests
 ROOT = Path(__file__).resolve().parent.parent
 TOKEN_FILE = ROOT / "yt_token.enc"
 REDIRECT = "http://localhost"
+# upload + read video stats; the revenue report only lets the pipeline switch to paid AI models by
+# itself once the channel earns (AI_TIER=auto). Amounts are never printed or stored.
 SCOPES = ("https://www.googleapis.com/auth/youtube.upload "
-          "https://www.googleapis.com/auth/youtube.readonly")
+          "https://www.googleapis.com/auth/youtube.readonly "
+          "https://www.googleapis.com/auth/yt-analytics-monetary.readonly")
 
 
 def sign_in_link(client_id: str) -> str:
@@ -69,6 +72,12 @@ def main() -> int:
         sys.exit("Google sent no refresh token. Remove the app at myaccount.google.com/permissions "
                  "and sign in again.")
     print(f"::add-mask::{refresh}")
+    if tok.get("refresh_token_expires_in"):
+        print(f"WARNING: Google will end this connection in {int(tok['refresh_token_expires_in']) // 86400} days "
+              "because the OAuth consent screen is in 'Testing'. In Google Cloud > OAuth consent screen, "
+              "click 'Publish app', then run this workflow again.")
+    print("Revenue reading (for automatic paid AI once monetized): "
+          + ("allowed" if "yt-analytics-monetary" in tok.get("scope", "") else "not allowed"))
 
     ch = requests.get("https://www.googleapis.com/youtube/v3/channels",
                       params={"part": "snippet,statistics", "mine": "true"},
