@@ -24,6 +24,30 @@ if os.getenv("GEMINI_API_KEY"):
         rows.append(("text", "gemini", "OK"))
     except SystemExit as e:
         rows.append(("text", "gemini", f"FAIL {str(e)[:80]}"))
+    for n in [m for m in p.gemini_candidates("text") if m.startswith("gemma")]:  # does the free fallback write JSON?
+        try:
+            p.ask_gemini(PROMPT, [n])
+            rows.append(("text", n, "OK"))
+        except SystemExit as e:
+            rows.append(("text", n, f"FAIL {str(e)[:80]}"))
+    # every Gemini model this key can call, and do the newest Pro (smartest) models answer for free?
+    try:
+        gk = {"x-goog-api-key": os.environ["GEMINI_API_KEY"]}
+        r = requests.get(f"{p.GEMINI_BASE}/models", params={"pageSize": 1000}, headers=gk, timeout=60)
+        names = sorted(m["name"].split("/")[-1] for m in r.json().get("models", [])
+                       if "generateContent" in m.get("supportedGenerationMethods", []))
+        print(f"\nGemini models ({r.status_code}): {', '.join(names)}\n")
+        smart = [n for n in names if re.search(r"pro|argon|gemini-4|gemma-4|omni", n)
+                 and not re.search(r"image|tts|audio|live|embed|computer|robotics|research|banana|lyria", n)]
+        music = [n for n in names if "lyria" in n]
+        for n in smart + music:  # 200 = free on this key; 429 "exceeded your current quota" = paid only
+            ask = "Compose 10 seconds of calm solo piano." if n in music else "Reply with the word OK."
+            r = requests.post(f"{p.GEMINI_BASE}/models/{n}:generateContent", headers=gk, timeout=180,
+                              json={"contents": [{"role": "user", "parts": [{"text": ask}]}]})
+            status = "OK (free)" if r.status_code == 200 else f"{r.status_code}: {r.text[:200]}"
+            rows.append(("music" if n in music else "text", n, " ".join(status.split())[:110]))
+    except Exception as e:  # noqa: BLE001 - a probe must never fail the check
+        print(f"Gemini model listing failed: {e}")
 else:
     rows.append(("text", "gemini", "no key"))
 rows += [("text", name, f"no key ({env})") for name, _, env, _ in p.FREE_TEXT_PROVIDERS if not os.getenv(env)]
@@ -71,7 +95,8 @@ if acct and token:
         for m in models:
             props = {x.get("property_id"): x.get("value") for x in m.get("properties") or []}
             print(f"  {m.get('name')}  | {str(props.get('price') or '')[:160]} | {(m.get('description') or '')[:90]}")
-        for m in [m.get("name", "") for m in models if "flux-2" in m.get("name", "")]:
+        # FLUX.2 [dev] is skipped: ~4,000-6,000 neurons per image would spend half the free day on one probe
+        for m in [m.get("name", "") for m in models if "flux-2" in m.get("name", "") and "flux-2-dev" not in m.get("name", "")]:
             if not check_images:
                 rows.append(("image", m, "skipped"))
                 continue
