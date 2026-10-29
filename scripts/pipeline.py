@@ -175,7 +175,12 @@ def add_tech_news() -> None:
 TECH_RULES = """TECH CHANNEL RULES ("{channel}" explains technology to everyone, without words)
 - Genres: "explainer" = how a technology works; "news" = a real recent tech story (state only what the
   headline says, add general background you are sure of, never invent numbers, dates, names or quotes);
-  "tip" = a practical phone/PC/app/AI tip anyone can try; "product" = what a product does and why it matters.
+  "tip" = a practical phone/PC/app/AI tip anyone can try; "product" = what a product does and why it matters;
+  "list" = a numbered countdown of 4-6 items (e.g. free apps that replace paid ones): scene 1 promises the
+  payoff in money or time saved ("5 free apps, $500 saved"), then one or two scenes per item whose first
+  caption starts with its number ("#1 LibreOffice replaces Microsoft Office"), the paid thing shown crossed
+  out before the free one appears; the last scene sums up. Name only real, well-known products you are sure
+  are free, never star counts or prices you are not sure of.
 - Accuracy first: leave out any detail you are not sure of. Captions explain step by step, like a smart friend.
 - Visuals: clean modern tech look (macro shots of chips and circuits, glowing data, hands using generic
   devices, simple diagram-like compositions). Generic, unbranded devices only: no logos, brand marks,
@@ -219,9 +224,10 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
             "Each idea: one sentence naming the technology and the surprising insight the viewer will get.").replace(
             "Mix genres: about half", "IGNORE: about half").replace(
             "(any country; universal emotions)", "(any country; things people use every day)") + (
-            '\nGenres for this tech channel: about half "explainer" (how a technology works), a quarter "tip" '
-            '(a practical phone/PC/app/AI tip anyone can try) and a quarter "product" (what a kind of product '
-            'or a well-known launch does and why it matters). Only facts you are sure of.')
+            '\nGenres for this tech channel: about half "explainer" (how a technology works), a fifth "tip" '
+            '(a practical phone/PC/app/AI tip anyone can try), a fifth "list" (a numbered countdown of 4-6 '
+            'items, e.g. free apps that replace paid ones, with the money or time saved) and the rest "product" '
+            '(what a kind of product or a well-known launch does and why it matters). Only facts you are sure of.')
     try:
         ideas = json.loads(_strip_fences(ask_ai(prompt)))["ideas"]
     except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
@@ -1291,11 +1297,36 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             a, b = t + XF * 0.6, t + s["seconds"] - XF
             lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Cap,,0,0,0,,"
                          f"{{\\fad(280,220)\\t(0,280,\\fscx104\\fscy104)\\t(280,500,\\fscx100\\fscy100)}}{cap}")
+    lines += progress_dots(scenes, starts, end_start)
     a, b = end_start + 0.5, end_start + end_len - 0.3
     lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},End,,0,0,0,,{{\\fad(600,400)}}{ass_escape(ending)}")
     lines.append(f"Dialogue: 0,{ass_time(a + 0.8)},{ass_time(b)},Tag,,0,0,0,,{{\\fad(600,400)}}"
                  f"{ass_escape(CHANNEL_NAME.upper())}")
     dest.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
+
+
+def progress_dots(scenes: list[dict], starts: list[float], end_start: float) -> list[str]:
+    """Countdown ("list") videos: a row of pills under the captions, one per numbered item ("#1 ...");
+    items reached so far are filled, so viewers see how many are left and stay for the last one."""
+    nums = [int(m.group(1)) if (m := re.match(r"\s*#\s*0*(\d{1,2})\b", s.get("caption", ""))) else 0
+            for s in scenes]
+    n = max(nums, default=0)
+    if not 3 <= n <= 12 or set(nums) - {0} != set(range(1, n + 1)):
+        return []  # not a clean countdown: no bar rather than a wrong one
+    w, h, gap = (48, 16, 14) if FILM else (64, 20, 18)
+    x0, y = (W - (n * w + (n - 1) * gap)) // 2, (H - 70) if FILM else (H - 470)
+    first = next(i for i, x in enumerate(nums) if x)
+    lines, seen = [], set()
+    for i in range(first, len(scenes)):
+        seen.add(nums[i] or next(iter(seen)))  # counts up or down alike: fill one pill per item shown
+        cur = len(seen)
+        a = starts[i] + (XF * 0.6 if i > first else 0)
+        b = starts[i + 1] + XF * 0.6 if i + 1 < len(scenes) else end_start
+        for k in range(n):
+            fill = "\\1c&H33E6FF&\\1a&H00&" if k < cur else "\\1c&HFFFFFF&\\1a&H90&"
+            lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Cap,,0,0,0,,{{\\an7\\pos({x0 + k * (w + gap)},{y})"
+                         f"\\bord3\\shad0\\3c&H000000&{fill}\\p1}}m 0 0 l {w} 0 {w} {h} 0 {h}{{\\p0}}")
+    return lines
 
 
 _C, _G, _AM, _F = (261.6, 329.6, 392.0), (196.0, 246.9, 293.7), (220.0, 261.6, 329.6), (174.6, 220.0, 261.6)

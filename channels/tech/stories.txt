@@ -1,7 +1,9 @@
-# Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, news).
+# Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, news).
 # The top line is used next. When fewer than 5 are left the AI adds more, and one fresh tech news
 # story (Hacker News front page) is put on top at most once a day.
 explainer | How Wi-Fi sends a video through walls: invisible radio waves, packets and the router's secret map
+list | 5 free, open-source apps that replace paid software: LibreOffice for Microsoft Office, GIMP for Photoshop, OBS Studio for screen recording, Bitwarden for paid password managers, Kdenlive for paid video editors
+list | 4 free tools already on your phone or computer that do the job of paid apps: built-in screen recorder, document scanner in the camera, offline maps, and the password manager
 explainer | How a phone camera makes night photos bright: dozens of quick shots stacked into one
 tip | The phone setting that makes your battery last years longer: stop charging at 80 percent
 explainer | How a computer chip with billions of switches is printed with light
