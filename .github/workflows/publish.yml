@@ -132,7 +132,13 @@ jobs:
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           FREE_ONLY: ${{ vars.FREE_ONLY }}
           SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && !inputs.only_if_due && inputs.skip_upload || 'false' }}
-        run: python scripts/pipeline.py
+        run: |
+          python scripts/pipeline.py
+          # after the weekly film: a vertical teaser Short cut from the film's own pictures. Best
+          # effort: it must never fail this step, or the film's upload wouldn't be recorded
+          if [ "$VIDEO_FORMAT" = film ]; then
+            VIDEO_FORMAT=teaser python scripts/pipeline.py || echo "::warning::teaser Short failed; the film itself is up"
+          fi
 
       - name: Cross-post to Instagram, Facebook and X
         if: success() && steps.due.outputs.go == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.skip_upload && !inputs.only_if_due)
@@ -157,6 +163,9 @@ jobs:
             out/metadata.json
             out/social.txt
             out/storyboard.json
+            out/teaser/work/short.mp4
+            out/teaser/thumbnail.jpg
+            out/teaser/metadata.json
           retention-days: 14
           if-no-files-found: ignore
 

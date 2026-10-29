@@ -88,6 +88,8 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 ## Daily use
 - **Ideas refill themselves:** when `stories.txt` drops below 5 ideas (or `films.txt` below 2), the AI adds fresh original ones that don't repeat past videos. You can still **add your own** (`genre | idea`), editing on github.com works fine. Each upload removes the top line and logs the link in `done.txt`.
 - **Better music:** drop royalty-free mp3s in `music/` (see `music/README.md`). Without them, a generated ambient pad is used.
+- **Title + thumbnail checked together:** before upload, the title and the thumbnail text are checked as one pairing (title under 60 characters with the subject up front for phones, no shouting or vague hype words, thumbnail 2-4 words that add to the title instead of repeating it). If something is off, the AI rewrites them once. Rules adapted from [youtube-agent-skill](https://github.com/Jakeschincariol/youtube-agent-skill) (MIT).
+- **Free teaser Short from every weekly film:** right after the film is up, the same run cuts a 25-40 s vertical teaser from the film's own pictures (no new images): a new hook and new captions, the whole picture sharp over a blurred copy, original music, and a link to the full film. It appears in `done.txt` as `teaser` and never uses up a Short window.
 - **Never misses, never doubles:** GitHub can delay or drop scheduled runs when it is busy (this repo has seen 3.5 h delays and skipped slots), so every publishing window gets 5-6 tries an hour apart. Each try first runs `scripts/due.py`, which reads `done.txt` in seconds: the first try that gets through makes the video, the others see it is up and stop. Exactly one video per window:
 
   | Window (IST) | Window (UTC) | Video | Tries |
