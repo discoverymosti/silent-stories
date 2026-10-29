@@ -1,1 +1,2 @@
 # Discovery Mosti TECH uploads: idea | link | time (UTC) | format
+Tech news: Qwenputer: A functioning, deterministic RISC-V CPU inside Qwen3.5 (source: https://divagr.com/blog/qwenputer) | https://youtube.com/shorts/ByKv9a3btag | 2026-10-29T11:30Z | short
