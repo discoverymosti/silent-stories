@@ -31,11 +31,15 @@ if os.getenv("GEMINI_API_KEY"):
         names = sorted(m["name"].split("/")[-1] for m in r.json().get("models", [])
                        if "generateContent" in m.get("supportedGenerationMethods", []))
         print(f"\nGemini models ({r.status_code}): {', '.join(names)}\n")
-        pros = [n for n in names if "pro" in n and not re.search(r"image|tts|audio|live|embed|computer|robotics", n)]
-        for n in sorted(pros, key=lambda n: p._version_key(n)[1:], reverse=True)[:3]:
+        smart = [n for n in names if re.search(r"pro|argon|gemini-4|gemma-4|omni", n)
+                 and not re.search(r"image|tts|audio|live|embed|computer|robotics|research|banana|lyria", n)]
+        music = [n for n in names if "lyria" in n]
+        for n in smart + music:  # 200 = free on this key; 429 "exceeded your current quota" = paid only
+            ask = "Compose 10 seconds of calm solo piano." if n in music else "Reply with the word OK."
             r = requests.post(f"{p.GEMINI_BASE}/models/{n}:generateContent", headers=gk, timeout=180,
-                              json={"contents": [{"role": "user", "parts": [{"text": "Reply with the word OK."}]}]})
-            rows.append(("text", n, "OK (free)" if r.status_code == 200 else f"{r.status_code}: {r.text[:100]}"))
+                              json={"contents": [{"role": "user", "parts": [{"text": ask}]}]})
+            status = "OK (free)" if r.status_code == 200 else f"{r.status_code}: {r.text[:200]}"
+            rows.append(("music" if n in music else "text", n, " ".join(status.split())[:110]))
     except Exception as e:  # noqa: BLE001 - a probe must never fail the check
         print(f"Gemini model listing failed: {e}")
 else:
