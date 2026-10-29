@@ -121,7 +121,11 @@ jobs:
           CHANNEL_HASHTAG: ${{ vars.CHANNEL_HASHTAG || '#DiscoveryMosti' }}
           VIDEO_FORMAT: ${{ steps.due.outputs.format }}
           WATERMARK: ${{ vars.WATERMARK || 'DiscoveryMosti' }}
-          FREE_ONLY: ${{ vars.FREE_ONLY || 'true' }}
+          AI_TIER: ${{ vars.AI_TIER || 'auto' }}
+          PAID_MIN_REVENUE_USD: ${{ vars.PAID_MIN_REVENUE_USD }}
+          PAID_BUDGET_USD: ${{ vars.PAID_BUDGET_USD }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          FREE_ONLY: ${{ vars.FREE_ONLY }}
           SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_upload || 'false' }}
         run: python scripts/pipeline.py
 
@@ -156,7 +160,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add stories.txt films.txt done.txt
+          git add stories.txt films.txt done.txt spend.txt
           git diff --cached --quiet || git commit -m "chore: published next story [skip ci]"
           # someone may have edited the queue on github.com during the run
           for i in 1 2 3; do git pull --rebase -q && git push && exit 0; sleep 5; done; exit 1

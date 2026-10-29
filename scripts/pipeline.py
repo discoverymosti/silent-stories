@@ -45,7 +45,7 @@ W, H, FPS = (1920, 1080, 30) if FILM else (1080, 1920, 30)
 XF = 0.5  # crossfade seconds
 FONT = os.getenv("CAPTION_FONT", "Noto Sans")
 FONTS_DIR = os.getenv("FONTS_DIR", "")  # extra fonts folder (static ffmpeg can't rely on system fontconfig)
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL") or "claude-opus-5-5"
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")  # empty = auto-pick newest
 GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "")  # empty = auto-pick newest
 VISUAL_MODE = os.getenv("VISUAL_MODE", "ai").lower()  # ai | stock
@@ -59,9 +59,26 @@ LANGS = [c.strip() for c in os.getenv("YT_LANGUAGES", "es,pt,hi,id,ar,fr,de,ja")
 # refuse to upload if more than this many scenes ended up as plain gradient filler
 MAX_FALLBACK = int(os.getenv("MAX_FALLBACK_SCENES", "4" if FILM else "2"))
 WATERMARK = os.getenv("WATERMARK", CHANNEL_NAME)
-# FREE_ONLY (default) = never call anything that can bill: no Gemini image generation (paid-only
-# for most keys, and billed if billing is ever enabled) and no Claude API. Set FREE_ONLY=false to allow.
-FREE_ONLY = os.getenv("FREE_ONLY", "true").lower() != "false"
+# AI tier: which models may be used.
+#   free  - never call anything that can bill.
+#   paid  - also use the paid models (Claude writes the stories, Gemini draws the pictures)
+#           wherever their key / billing is set up; the free models remain the fallback.
+#   auto  - (default) free until the channel is monetized and earned at least PAID_MIN_REVENUE_USD
+#           in the last 28 days (YouTube Analytics), then paid by itself, and free again if it stops.
+# Paid use never goes above PAID_BUDGET_USD per calendar month (estimated cost logged in spend.txt).
+# FREE_ONLY=true is a kill switch that forces free; FREE_ONLY=false (older setting) means paid.
+_FREE_ONLY = os.getenv("FREE_ONLY", "").strip().lower()
+AI_TIER = "free" if _FREE_ONLY == "true" else (
+    os.getenv("AI_TIER") or ("paid" if _FREE_ONLY == "false" else "auto")).strip().lower()
+PAID_MIN_REVENUE = float(os.getenv("PAID_MIN_REVENUE_USD") or 20)
+PAID_BUDGET = float(os.getenv("PAID_BUDGET_USD") or 10)
+SPEND = ROOT / "spend.txt"
+PAID = False  # decided once per run by decide_tier()
+# $ per million input / output tokens, for the spend log (an unknown model is costed as the dearest)
+CLAUDE_PRICES = {"claude-fable-5-1": (10.0, 50.0), "claude-opus-5-5": (4.0, 20.0),
+                 "claude-sonnet-5-5": (2.0, 10.0), "claude-haiku-5-5": (0.10, 0.50)}
+CLAUDE_FALLBACK_OK = {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"}
+GEMINI_IMAGE_USD = float(os.getenv("GEMINI_IMAGE_USD") or 0.07)  # cautious estimate per Gemini image
 
 NO_TEXT = ("No text, no letters, no captions, no logos, no watermark, no brand names, "
            "no real celebrities, no copyrighted characters.")
@@ -170,6 +187,112 @@ def channel_performance(limit: int = 50) -> list[tuple[str, int]]:
         return []
     rows = [(i["snippet"]["title"], int(i.get("statistics", {}).get("viewCount", 0))) for i in items]
     return sorted(rows, key=lambda r: -r[1])
+
+
+# ================================================================ AI tier (free now, paid once the channel earns)
+
+def month_spend() -> float:
+    """Estimated paid AI cost logged this calendar month (spend.txt lines: time | what | usd)."""
+    if not SPEND.exists():
+        return 0.0
+    month, total = datetime.now(timezone.utc).strftime("%Y-%m"), 0.0
+    for line in SPEND.read_text(encoding="utf-8").splitlines():
+        parts = [x.strip() for x in line.split("|")]
+        if len(parts) == 3 and parts[0].startswith(month):
+            try:
+                total += float(parts[2])
+            except ValueError:
+                pass
+    return total
+
+
+def log_spend(what: str, usd: float) -> None:
+    with SPEND.open("a", encoding="utf-8") as f:
+        f.write(f"{datetime.now(timezone.utc):%Y-%m-%dT%H:%MZ} | {what} | {usd:.4f}\n")
+
+
+def paid_ok(cost: float = 0.0) -> bool:
+    """Paid models allowed for a call that may cost `cost`: paid tier on and the budget not reached."""
+    global PAID
+    if PAID and month_spend() + cost > PAID_BUDGET:
+        print(f"  this month's paid AI budget (${PAID_BUDGET:g}) is reached: free models only from here")
+        PAID = False
+    return PAID
+
+
+def google_token() -> dict:
+    """Fresh access token for the connected channel (the reply also lists the granted scopes)."""
+    r = requests.post("https://oauth2.googleapis.com/token", timeout=30, data={
+        "client_id": os.environ["YT_CLIENT_ID"], "client_secret": os.environ["YT_CLIENT_SECRET"],
+        "refresh_token": refresh_token(), "grant_type": "refresh_token"})
+    return r.json() if r.headers.get("content-type", "").startswith("application/json") else {"error": r.status_code}
+
+
+def channel_monetized() -> bool | None:
+    """True if the channel earned at least PAID_MIN_REVENUE_USD over the last 28 days of YouTube
+    Analytics data, False if less, None if unknown. Never prints an amount: the Actions logs of a
+    public repository are public."""
+    try:
+        tok = google_token()
+    except Exception as e:  # noqa: BLE001 - unknown means free
+        print(f"  earnings check: no YouTube token ({str(e)[:100]})")
+        return None
+    if "yt-analytics-monetary" not in tok.get("scope", ""):
+        print("  earnings check: not allowed yet. When the channel is monetized, enable the YouTube "
+              "Analytics API and run 'Connect YouTube channel' again (README: Paid AI later).")
+        return None
+    end = datetime.now(timezone.utc).date() - timedelta(days=3)  # revenue data arrives 2-3 days late
+    r = requests.get("https://youtubeanalytics.googleapis.com/v2/reports", timeout=60,
+                     headers={"Authorization": f"Bearer {tok['access_token']}"},
+                     params={"ids": "channel==MINE", "startDate": str(end - timedelta(days=27)),
+                             "endDate": str(end), "metrics": "estimatedRevenue", "currency": "USD"})
+    if r.status_code != 200:
+        hint = ("enable the YouTube Analytics API in Google Cloud" if "disabled" in r.text or
+                "accessNotConfigured" in r.text else "is the channel in the YouTube Partner Program?")
+        print(f"  earnings check failed ({r.status_code}): {hint}")
+        return None
+    rows = r.json().get("rows") or [[0]]
+    return float(rows[0][0] or 0) >= PAID_MIN_REVENUE
+
+
+def youtube_connection_check() -> None:
+    """Stop before any AI work if the YouTube connection is dead (no free quota is spent on a video
+    that can't be uploaded), and warn when Google is going to end it (consent screen in 'Testing')."""
+    try:
+        tok = google_token()
+    except Exception as e:  # noqa: BLE001 - network trouble: the upload itself retries later
+        print(f"  YouTube connection check skipped ({str(e)[:100]})")
+        return
+    if tok.get("error") == "invalid_grant":
+        sys.exit("The YouTube connection has expired or was revoked. Run 'Connect YouTube channel' again, and "
+                 "publish the OAuth consent screen in Google Cloud so Google stops expiring it (README).")
+    if tok.get("refresh_token_expires_in"):
+        print(f"WARNING: Google will end this YouTube connection in {int(tok['refresh_token_expires_in']) // 86400} "
+              "days because the OAuth consent screen is still in 'Testing'. Publish it and reconnect (README).")
+
+
+def decide_tier() -> None:
+    """Free or paid models for this run (see AI_TIER at the top)."""
+    global PAID
+    PAID = False
+    if AI_TIER == "free":
+        why = "AI_TIER=free"
+    elif month_spend() >= PAID_BUDGET:
+        why = f"this month's paid AI budget (${PAID_BUDGET:g}) is used up"
+    elif AI_TIER == "paid":
+        PAID, why = True, "AI_TIER=paid"
+    elif AI_TIER == "auto":
+        earning = channel_monetized() if os.getenv("YT_CLIENT_ID") else None
+        PAID = earning is True
+        why = {True: "the channel is monetized and earning", False: "the channel is not earning enough yet",
+               None: "channel earnings unknown"}[earning]
+    else:
+        why = f"unknown AI_TIER {AI_TIER!r}"
+    if PAID:
+        ready = [n for n, k in (("Claude stories", "ANTHROPIC_API_KEY"),
+                                ("Gemini images if billing is on", "GEMINI_API_KEY")) if os.getenv(k)]
+        why += f"; paid services set up: {', '.join(ready) or 'none (add ANTHROPIC_API_KEY)'}"
+    print(f"AI tier: {'PAID' if PAID else 'FREE'} ({why})")
 
 
 # ================================================================ storyboard + SEO
@@ -281,11 +404,11 @@ def gemini_candidates(kind: str) -> list[str]:
         newest = lambda xs: sorted(xs, key=_version_key, reverse=True)
         flash = newest([n for n in pool if "flash" in n and "lite" not in n])
         lite = newest([n for n in pool if "lite" in n])
-        gemma = newest([n for n in names if re.fullmatch(r"gemma-[\d.]+-\d+b-it", n)])  # largest dense Gemma
+        gemma = newest([n for n in names if re.fullmatch(r"gemma-[\d.]+-\d+b(?:-a\d+b)?-it", n)])  # 31B, then 26B MoE
         # every model has its own free quota: mix families so that when the Flash models (the
         # smartest free ones) are busy or used up for the day, Flash-Lite and Gemma still answer.
         # No Pro: Gemini 3.1 Pro / 4 are paid-only and 2.5 Pro is closed to new users (AI check, Oct 2026).
-        pool = flash[:3] + lite[:3] + gemma[:1]
+        pool = flash[:3] + lite[:3] + gemma[:2]
     else:
         pool = sorted([n for n in names if "image" in n and "gemini" in n], key=_version_key, reverse=True)[:5]
     if wanted:
@@ -408,8 +531,14 @@ def ask_openai_compatible(name: str, url: str, key: str, models: list[str], prom
     return None
 
 
-def ask_ai(prompt: str) -> str:
-    """Story/idea text from the first free provider that answers with valid JSON."""
+def ask_ai(prompt: str, creative: bool = True) -> str:
+    """Text from the first provider that answers with valid JSON. In the paid tier Claude writes
+    the creative text (ideas, stories) first; translations always use the free models."""
+    if creative and os.getenv("ANTHROPIC_API_KEY") and paid_ok():
+        try:
+            return ask_claude(prompt)
+        except Exception as e:  # noqa: BLE001 - paid is a bonus: the free models take over
+            print(f"  Claude unavailable ({str(e)[:150]}); using the free models")
     if os.getenv("GEMINI_API_KEY"):
         try:
             return ask_gemini(prompt)
@@ -419,17 +548,32 @@ def ask_ai(prompt: str) -> str:
         text = ask_openai_compatible(name, url, key, models, prompt)
         if text:
             return text
-    if os.getenv("ANTHROPIC_API_KEY") and not FREE_ONLY:
-        return ask_claude(prompt)
     raise SystemExit("No AI text provider answered (all busy or out of free quota). Add a free "
                      "GROQ_API_KEY backup, or wait for the daily reset.")
 
 
 def ask_claude(prompt: str) -> str:
+    """Claude (paid tier only). Thinking is always on in current models; effort "high" for story
+    quality. If Claude declines a prompt, the API re-runs it on another Claude model ("default"
+    server-side fallback) and the cost of what ran is logged."""
     import anthropic
-    msg = anthropic.Anthropic().messages.create(
-        model=CLAUDE_MODEL, max_tokens=4000, messages=[{"role": "user", "content": prompt}])
-    return msg.content[0].text
+    inp, out = CLAUDE_PRICES.get(CLAUDE_MODEL, (10.0, 50.0))
+    if not paid_ok(16000 * out / 1e6):  # the dearest this call can be must fit in the month's budget
+        raise RuntimeError("monthly paid budget reached")
+    fallback = ({"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
+                if CLAUDE_MODEL in CLAUDE_FALLBACK_OK else {})
+    msg = anthropic.Anthropic().beta.messages.create(
+        model=CLAUDE_MODEL, max_tokens=16000, output_config={"effort": "high"},
+        system="Reply with valid JSON only, no other text.",
+        messages=[{"role": "user", "content": prompt}], **fallback)
+    inp, out = CLAUDE_PRICES.get(msg.model, (inp, out))
+    log_spend(f"claude {msg.model}", (msg.usage.input_tokens * inp + msg.usage.output_tokens * out) / 1e6)
+    if msg.stop_reason == "refusal":
+        raise RuntimeError("Claude declined this prompt")
+    text = next((b.text for b in msg.content if b.type == "text"), "")
+    json.loads(_strip_fences(text))
+    print(f"  answer by {msg.model}")
+    return text
 
 
 def storyboard_problem(sb) -> str:
@@ -525,7 +669,7 @@ def full_prompt(sb: dict, scene: dict | str) -> str:
 
 def gen_image_gemini(prompt: str, dest: Path) -> bool:
     global _gemini_img_ok
-    if FREE_ONLY or not (_gemini_img_ok and os.getenv("GEMINI_API_KEY")):
+    if not (_gemini_img_ok and os.getenv("GEMINI_API_KEY") and paid_ok(GEMINI_IMAGE_USD)):
         return False
     model = pick_gemini_model("image")
     if not model:
@@ -553,6 +697,7 @@ def gen_image_gemini(prompt: str, dest: Path) -> bool:
             data = (part.get("inlineData") or part.get("inline_data") or {}).get("data")
             if data:
                 dest.write_bytes(base64.b64decode(data))
+                log_spend(f"gemini image {model}", GEMINI_IMAGE_USD)
                 return True
     return False
 
@@ -1236,7 +1381,7 @@ def localize(title: str, description: str, tail: str) -> dict:
         return {}
     try:
         data = json.loads(_strip_fences(ask_ai(TRANSLATE_PROMPT.format(
-            langs=", ".join(LANGS), title=title, description=description))))
+            langs=", ".join(LANGS), title=title, description=description), creative=False)))
     except (SystemExit, Exception) as e:  # noqa: BLE001 - translations must never stop an upload
         print(f"  translations skipped: {e}")
         return {}
@@ -1354,6 +1499,9 @@ def main() -> int:
     if recent > 0 and uploaded_within(recent):
         print(f"A {FORMAT} was already uploaded in the last {recent:g} h - nothing to do.")
         return 0
+    if not SKIP_UPLOAD and os.getenv("YT_CLIENT_ID"):
+        youtube_connection_check()
+    decide_tier()
     refill_queue()
     item = next_story()
     if not item:

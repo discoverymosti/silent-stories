@@ -18,6 +18,21 @@ import pipeline as p  # noqa: E402
 PROMPT = 'Return JSON {"ok": true, "word": "<one happy English word>"}'
 rows = []
 
+if os.getenv("YT_CLIENT_ID"):  # is the YouTube connection alive (and not about to expire)?
+    try:
+        p.youtube_connection_check()
+        rows.append(("yt", "youtube connection", "OK"))
+    except SystemExit as e:
+        rows.append(("yt", "youtube connection", f"FAIL {str(e)[:90]}"))
+p.decide_tier()  # free now; paid models only once the channel earns (README: Paid AI later)
+rows.append(("tier", f"AI tier {'PAID' if p.PAID else 'FREE'}", f"AI_TIER={p.AI_TIER} (reason in the log above)"))
+if p.PAID and os.getenv("ANTHROPIC_API_KEY"):
+    try:
+        p.ask_claude(PROMPT)
+        rows.append(("text", "claude", "OK (paid)"))
+    except Exception as e:  # noqa: BLE001
+        rows.append(("text", "claude", f"FAIL {str(e)[:80]}"))
+
 if os.getenv("GEMINI_API_KEY"):
     try:
         p.ask_gemini(PROMPT)
