@@ -36,6 +36,9 @@ ROOT = Path(__file__).resolve().parent.parent
 # VIDEO_FORMAT=film:  weekly widescreen short film (~3 min) from films.txt
 FORMAT = os.getenv("VIDEO_FORMAT", "short").lower()
 FILM = FORMAT == "film"
+# VIDEO_FORMAT=teaser: right after the weekly film is up, a vertical teaser Short cut from the
+# film's own pictures (new hook and captions, links to the film): one more upload, no new images
+TEASER = FORMAT == "teaser"
 STORIES = ROOT / ("films.txt" if FILM else "stories.txt")
 DONE = ROOT / "done.txt"
 MUSIC_DIR = ROOT / "music"
@@ -351,7 +354,8 @@ SEO / SMO RULES
 - "thumbnail_prompt": the single most eye-catching vertical image for this story,
   same style and cast (refer to them by id, e.g. "A smiling through tears"), strong
   emotion, clean background space at the top.
-- "thumbnail_text": 2-4 words, punchy, uppercase.
+- "thumbnail_text": 2-4 words, punchy, uppercase, and NO word from the title: the thumbnail says
+  what the title doesn't, so together they make one hook.
 
 Return ONLY valid JSON with exactly these keys:
 {{"title": str, "description": str, "hashtags": [str], "tags": [str],
@@ -591,6 +595,71 @@ def storyboard_problem(sb) -> str:
     return ""
 
 
+# Title + thumbnail checked as one pairing, as viewers see them. Rules adapted from the title linter
+# of github.com/Jakeschincariol/youtube-agent-skill (MIT).
+VAGUE_WORDS = {"amazing", "incredible", "insane", "crazy", "huge", "massive", "ultimate", "best",
+               "powerful", "secret", "revolutionary", "mindblowing", "epic", "perfect", "complete",
+               "everything", "shocking", "unbelievable"}
+STOP_WORDS = {"the", "a", "an", "of", "for", "to", "in", "on", "and", "or", "is", "are", "with", "your",
+              "you", "my", "i", "this", "that", "it", "how", "what", "why", "when", "who", "his", "her"}
+
+PACKAGE_FIX_PROMPT = """Improve this YouTube video's title and thumbnail text. Fix exactly these problems:
+{problems}
+Story: {description}
+Current title: {title}
+Current thumbnail text: {thumb}
+Rules: title max 60 characters, the main subject in the first 4 words, honest curiosity, no hashtags,
+no ALL CAPS; thumbnail text 2-4 words, uppercase, adding what the title does not say and sharing no
+word with it. Return ONLY JSON: {{"title": str, "thumbnail_text": str}}"""
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9']+", text.lower())
+
+
+def package_problems(title: str, thumb: str) -> list[str]:
+    """What weakens the title + thumbnail pairing ([] if nothing)."""
+    out = []
+    if len(title) > 60:
+        out.append(f"the title has {len(title)} characters; search results cut it after about 60")
+    if not [w for w in _words(title)[:4] if w not in STOP_WORDS]:
+        out.append("the first words of the title are filler; phones show only about 40 characters")
+    caps = [w for w in title.split() if len(w) > 2 and w.isupper()]
+    if len(caps) > 1:
+        out.append("the title shouts in capitals")
+    vague = sorted({w for w in _words(f"{title} {thumb}") if w in VAGUE_WORDS})
+    if vague:
+        out.append(f"vague hype words ({', '.join(vague)}); say something concrete instead")
+    shared = sorted((set(_words(title)) & set(_words(thumb))) - STOP_WORDS)
+    if shared:
+        out.append(f"the thumbnail repeats the title ({', '.join(shared)}); it should add new words")
+    if len(_words(thumb)) > 4:
+        out.append(f"the thumbnail text has {len(_words(thumb))} words; 2-4 read at feed size")
+    return out
+
+
+def polish_package(sb: dict) -> None:
+    """Check the title + thumbnail text and let the AI fix weak points once (best effort)."""
+    thumb = str(sb.get("thumbnail_text") or "")
+    problems = package_problems(sb["title"], thumb)
+    if not problems:
+        print("  title + thumbnail check: OK")
+        return
+    print(f"  title + thumbnail check: {'; '.join(problems)}")
+    try:
+        fix = json.loads(_strip_fences(ask_ai(PACKAGE_FIX_PROMPT.format(
+            problems="\n".join(f"- {x}" for x in problems), description=sb["description"][:400],
+            title=sb["title"], thumb=thumb))))
+        title, new_thumb = " ".join(str(fix["title"]).split()), " ".join(str(fix["thumbnail_text"]).split()).upper()
+    except (SystemExit, Exception) as e:  # noqa: BLE001 - polishing must never stop a video
+        print(f"  could not polish the title ({str(e)[:100]})")
+        return
+    left = package_problems(title, new_thumb)
+    if title and new_thumb and len(left) < len(problems):
+        print(f"  improved: \"{title}\" + [{new_thumb}]" + (f" (still: {'; '.join(left)})" if left else ""))
+        sb["title"], sb["thumbnail_text"] = title, new_thumb
+
+
 def storyboard(genre: str, idea: str) -> dict:
     prompt = STORYBOARD_PROMPT.format(genre=genre, idea=idea, channel=CHANNEL_NAME)
     if FILM:
@@ -633,6 +702,7 @@ def storyboard(genre: str, idea: str) -> dict:
         sb["grade"] = "teal_orange"
     sb.setdefault("hashtags", [])
     sb.setdefault("tags", [])
+    polish_package(sb)
     return sb
 
 
@@ -1243,6 +1313,40 @@ def make_thumbnail(sb: dict, src: Path | None, dest: Path) -> None:
 
 # ================================================================ build
 
+def finish_video(sb: dict, parts: list[Path], lengths: list[float], work: Path, report: dict,
+                 intro_len: float = 0.0) -> tuple[Path, float]:
+    """Crossfade the scene clips, then add captions, original music and the watermark."""
+    joined = work / "joined.mp4"
+    starts = crossfade_all(parts, lengths, joined, fade_ends=FILM)
+    total = starts[-1] + lengths[-1]
+    subs = work / "captions.ass"
+    scene_starts = starts[1:] if FILM else starts
+    end_start = starts[-1] if FILM else starts[-1] + sb["scenes"][-1]["seconds"] - 0.2
+    write_captions(sb["scenes"], scene_starts, sb["ending"], end_start, total - end_start, subs,
+                   title=sb["title"] if FILM else "", title_len=intro_len)
+    music = work / "music.m4a"
+    report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
+
+    final = work / "short.mp4"
+    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}" + (f":fontsdir={FONTS_DIR}" if FONTS_DIR else "") + watermark_filter(), *ENC,
+       "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(final))
+    return final, total
+
+
+def portrait_scene(img: Path, seconds: float, dest: Path) -> None:
+    """A widescreen film picture in a vertical frame: the whole picture, sharp, slowly zooming in
+    the middle, over a blurred and darkened copy of itself (captions sit on the blur below)."""
+    n = int(round(seconds * FPS))
+    fh = int(W * 768 / 1344) // 2 * 2
+    graph = (f"[0:v]split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+             f"boxblur=40:3,eq=brightness=-0.16:saturation=0.85[bg];"
+             f"[b]scale={W * 2}:{fh * 2},zoompan=z='1+0.07*on/{n}':x='iw/2-(iw/zoom/2)':"
+             f"y='ih/2-(ih/zoom/2)':d=1:s={W}x{fh}:fps={FPS}[fg];"
+             f"[bg][fg]overlay=0:(H-h)/2-120,setsar=1,{LOOK}")
+    ff("-loop", "1", "-framerate", str(FPS), "-t", f"{seconds:.3f}", "-i", str(img),
+       "-filter_complex", graph, "-frames:v", str(n), *ENC, str(dest))
+
+
 def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
     work.mkdir(parents=True, exist_ok=True)
     used: set[int] = set()
@@ -1304,21 +1408,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
         parts.append(end)
         lengths.append(4.0 + XF)
 
-    joined = work / "joined.mp4"
-    starts = crossfade_all(parts, lengths, joined, fade_ends=FILM)
-    total = starts[-1] + lengths[-1]
-    subs = work / "captions.ass"
-    scene_starts = starts[1:] if FILM else starts
-    end_start = starts[-1] if FILM else starts[-1] + sb["scenes"][-1]["seconds"] - 0.2
-    write_captions(sb["scenes"], scene_starts, sb["ending"], end_start, total - end_start, subs,
-                   title=sb["title"] if FILM else "", title_len=intro_len)
-    music = work / "music.m4a"
-    report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
-
-    final = work / "short.mp4"
-    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}" + (f":fontsdir={FONTS_DIR}" if FONTS_DIR else "") + watermark_filter(), *ENC,
-       "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(final))
-
+    final, total = finish_video(sb, parts, lengths, work, report, intro_len)
     if not (sources.get("thumb") and thumb_img.exists()):
         thumb_img = imgs[0]
     try:
@@ -1504,7 +1594,116 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
 
 # ================================================================ main
 
+# ================================================================ film teaser Short
+
+TEASER_PROMPT = """You cut a vertical YouTube Short (a TEASER) from the silent short film below, made by
+"{channel}". Viewers in every country watch it with no sound or words, only pictures, short captions
+and music. The teaser must make them want to watch the full film, without giving the ending away.
+
+Film title: {title}
+Film story: {description}
+Film scenes you can use (index: what we see | the film's caption):
+{scenes}
+
+RULES
+- Pick 6 to 8 scene indexes, in any order. Scene 1 of the teaser is the HOOK: the most striking
+  picture with a caption that raises a question. Never show the final resolution.
+- Write NEW captions (max 7 simple words, present tense, no emojis), not the film's; 1-2 may be "".
+- "seconds": 3.5 to 5.5 per scene.
+- "ending": max 8 words inviting viewers to watch the full film on the channel.
+- "title": max 60 characters, different from the film's title, honest curiosity, no hashtags, no ALL CAPS.
+- "description": 3 short lines; say it is a teaser of the full silent short film.
+- "hashtags": 3-5 (no #Shorts). "tags": 8-12 search phrases.
+- "thumbnail_text": 2-4 words, uppercase, sharing no word with the title.
+- "music_mood": one of warm, sad, tense, curious, uplifting.
+
+Return ONLY JSON: {{"title": str, "description": str, "hashtags": [str], "tags": [str],
+  "thumbnail_text": str, "ending": str, "music_mood": str,
+  "scenes": [{{"index": int, "caption": str, "seconds": number}}]}}"""
+
+
+def teaser_main() -> int:
+    """After the weekly film upload (same workflow job): a vertical teaser Short made from the
+    film's pictures, linking to the film. Reuses the film's out/ folder; writes to out/teaser/."""
+    film_meta, film_sb, film_work = OUT / "metadata.json", OUT / "storyboard.json", OUT / "work"
+    if not (film_meta.exists() and film_sb.exists()):
+        print("No film from this run - no teaser.")
+        return 0
+    film = json.loads(film_sb.read_text(encoding="utf-8"))
+    film_url = json.loads(film_meta.read_text(encoding="utf-8")).get("youtube_url")
+    if not film_url and not SKIP_UPLOAD:
+        print("The film was not uploaded - no teaser.")
+        return 0
+    usable = {i: s for i, s in enumerate(film["scenes"]) if (film_work / f"img_{i:02d}.png").exists()}
+    if len(usable) < 6:
+        print(f"Only {len(usable)} film pictures available - no teaser.")
+        return 0
+    decide_tier()
+    lines = "\n".join(f"{i}: {s['image_prompt'][:140]} | {s.get('caption', '')}" for i, s in usable.items())
+    sb = None
+    for attempt in range(2):
+        try:
+            sb = json.loads(_strip_fences(ask_ai(TEASER_PROMPT.format(
+                channel=CHANNEL_NAME, title=film["title"], description=film["description"][:600], scenes=lines))))
+            sb["scenes"] = [{"index": int(x["index"]), "caption": str(x.get("caption") or ""),
+                             "seconds": max(3.0, min(6.0, float(x.get("seconds") or 4.5)))}
+                            for x in sb.get("scenes") or [] if int(x.get("index", -1)) in usable][:9]
+            if len(sb["scenes"]) >= 5 and str(sb.get("title") or "").strip():
+                break
+            print(f"  teaser plan rejected ({len(sb['scenes'])} usable scenes)")
+        except (SystemExit, Exception) as e:  # noqa: BLE001
+            print(f"  teaser plan failed ({str(e)[:120]})")
+        sb = None
+    if not sb:
+        print("No usable teaser plan - skipping the teaser (the film is up).")
+        return 0
+    sb["title"] = " ".join(str(sb["title"]).split())
+    sb["description"] = (str(sb.get("description") or "").strip()
+                         + (f"\n\n▶ Full film: {film_url}" if film_url else ""))
+    sb["ending"] = str(sb.get("ending") or "Watch the full film on our channel").strip()
+    if sb.get("music_mood") not in CHORDS:
+        sb["music_mood"] = film.get("music_mood", "warm")
+    sb.setdefault("hashtags", film.get("hashtags", []))
+    sb.setdefault("tags", film.get("tags", []))
+    polish_package(sb)
+
+    out = OUT / "teaser"
+    work = out / "work"
+    work.mkdir(parents=True, exist_ok=True)
+    set_grade(film.get("grade", "teal_orange"))
+    parts, lengths, report = [], [], {"ai": 0, "stock": 0, "reused": 0, "fallback": 0, "from_film": True}
+    for k, s in enumerate(sb["scenes"]):
+        L = s["seconds"] + XF + (2.8 if k == len(sb["scenes"]) - 1 else 0.0)
+        part = work / f"scene_{k:02d}.mp4"
+        portrait_scene(film_work / f"img_{s['index']:02d}.png", L, part)
+        report["ai"] += 1
+        print(f"  teaser scene {k + 1} <- film scene {s['index'] + 1} | {s['caption']}")
+        parts.append(part)
+        lengths.append(L)
+    final, total = finish_video(sb, parts, lengths, work, report)
+    report["duration"] = round(total, 1)
+    thumb = out / "thumbnail.jpg"
+    make_thumbnail(sb, film_work / f"img_{sb['scenes'][0]['index']:02d}.png", thumb)
+    meta = build_metadata(sb, report, "story")
+    main_text = sb["description"].strip()
+    if meta["description"].startswith(main_text):
+        meta["localizations"] = localize(meta["title"], main_text, meta["description"][len(main_text):])
+    (out / "metadata.json").write_text(json.dumps({**meta, "report": report}, indent=2, ensure_ascii=False),
+                                       encoding="utf-8")
+    print(f"Rendered teaser {final} ({report})")
+    if SKIP_UPLOAD:
+        print("Preview only - the teaser is in the run's artifacts.")
+        return 0
+    vid = upload(final, thumb, meta)
+    with DONE.open("a", encoding="utf-8") as f:
+        f.write(f"Teaser of: {film['title']} | https://youtube.com/shorts/{vid} | "
+                f"{datetime.now(timezone.utc):%Y-%m-%dT%H:%MZ} | teaser\n")
+    return 0
+
+
 def main() -> int:
+    if TEASER:
+        return teaser_main()
     # Scheduled runs skip if this format was uploaded in the last few hours. With a catch-up
     # cron 2 h after each slot, a run GitHub delayed or dropped is made up for, never doubled.
     recent = float(os.getenv("SKIP_IF_UPLOADED_WITHIN_HOURS") or 0)
