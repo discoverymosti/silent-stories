@@ -16,7 +16,10 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-DONE = Path(__file__).resolve().parent.parent / "done.txt"
+ROOT = Path(__file__).resolve().parent.parent
+CHANNEL = (os.getenv("CHANNEL") or "main").strip().lower()
+CH_DIR = ROOT if CHANNEL == "main" else ROOT / "channels" / CHANNEL
+DONE = CH_DIR / "done.txt"
 
 # publishing windows in UTC: (start hour, end hour, weekdays with Monday = 0)
 WINDOWS = {
@@ -24,6 +27,10 @@ WINDOWS = {
     "short": [(1, 7, {0, 1, 2, 3, 4, 5}),        # Mon-Sat: Asia morning / Americas evening
               (14, 20, {0, 1, 2, 3, 4, 5, 6})],  # daily: Asia/Europe evening / Americas morning
 }
+if CHANNEL == "tech":  # Discovery Mosti TECH: two Shorts a day, between the main channel's windows
+    WINDOWS = {"film": [],
+               "short": [(7, 13, set(range(7))),     # 12:30-18:30 IST: India afternoon / Europe morning
+                         (19, 24, set(range(7)))]}   # 00:30-05:30 IST: Americas afternoon-evening
 
 
 def last_upload(fmt: str) -> datetime | None:
@@ -90,8 +97,11 @@ def decide(now: datetime, event: str, manual_format: str, schedule: str = "",
 
 
 def main() -> None:
-    go, fmt, why = decide(datetime.now(timezone.utc), os.getenv("EVENT", ""), os.getenv("MANUAL_FORMAT", ""),
-                          os.getenv("SCHEDULE", ""), os.getenv("ONLY_IF_DUE", "").lower() == "true")
+    if not (CH_DIR / "yt_token.enc").exists() and not os.getenv("YT_REFRESH_TOKEN"):
+        go, fmt, why = False, "short", f"the {CHANNEL} YouTube channel is not connected yet (Connect YouTube channel)"
+    else:
+        go, fmt, why = decide(datetime.now(timezone.utc), os.getenv("EVENT", ""), os.getenv("MANUAL_FORMAT", ""),
+                              os.getenv("SCHEDULE", ""), os.getenv("ONLY_IF_DUE", "").lower() == "true")
     print(f"{'GO' if go else 'SKIP'}: {why}")
     if os.getenv("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:

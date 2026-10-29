@@ -103,6 +103,14 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 - **Exact timing (optional, free):** if GitHub keeps skipping, let a free cron service trigger the tries instead. Create a fine-grained GitHub token (Settings → Developer settings → Fine-grained tokens → only this repo → *Contents: Read and write*), then on cron-job.org add a job every hour at :40 that sends `POST https://api.github.com/repos/discoverymosti/silent-stories/dispatches` with headers `Authorization: Bearer <token>`, `Accept: application/vnd.github+json` and body `{"event_type": "publish-tick"}`. The due check still guarantees one video per window.
 - **Change windows:** edit `WINDOWS` in `scripts/due.py` and the matching `cron` lines in `.github/workflows/publish.yml` (times are UTC).
 
+## Second channel: Discovery Mosti TECH
+Silent tech Shorts (AI visuals, captions, original music, no voice), 2 a day, from the same repo and the same free AI keys:
+- **What:** how technology works (`explainer`), practical phone/PC/app/AI tips (`tip`), what products do (`product`), and once a day a real tech news story (`news`) taken from the Hacker News front page, with the source linked in the description. Accuracy rules forbid invented numbers or quotes; visuals use generic devices only (no logos or real product photos).
+- **Where:** its own queue `channels/tech/stories.txt`, upload log `channels/tech/done.txt` and YouTube connection `channels/tech/yt_token.enc`; workflow **Discovery Mosti TECH - Publish Short** (`publish-tech.yml`).
+- **When (one Short per window):** 12:30–18:30 IST and 00:30–05:30 IST, daily (07–13 and 19–24 UTC). The Claude upload timer presses its button at 13:20 / 16:20 IST and 01:20 / 03:50 IST.
+- **Safe:** a TECH upload is refused if the connected channel's name doesn't contain "TECH", so it can never land on DiscoveryMosti. Thumbnails use FLUX.2 [klein] 4B so both channels fit in Cloudflare's free daily allowance.
+- **Connect it once:** Actions → **Connect YouTube channel** → *channel* = `tech` → Run (code empty) → open the link, **pick the Discovery Mosti TECH channel**, Allow → run again with *channel* = `tech` and the `localhost` address in *code*. The log must say `Connected channel: Discovery Mosti TECH`.
+
 ## Optional variables
 | Variable | Default |
 |---|---|
