@@ -97,6 +97,7 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
   | Sunday 21:30 – 03:30 | Sunday 16:00 – 22:00 | weekly film | 6, hourly |
 
   A try that GitHub starts late still counts for the window it was planned for. In the Actions list these runs are called *"Automatic: uploads only if a video is due"*; most of them finish in seconds with nothing to do, which is normal.
+- **Timer mode:** *Run workflow* with **only_if_due** ticked behaves like a timer tick: it uploads only if the current window's video isn't up yet (format and preview are then ignored), so any timer can press it safely. This repo uses a Claude scheduled task as that punctual timer, because GitHub dropped every scheduled try on 29 Oct 2026.
 - **Exact timing (optional, free):** if GitHub keeps skipping, let a free cron service trigger the tries instead. Create a fine-grained GitHub token (Settings → Developer settings → Fine-grained tokens → only this repo → *Contents: Read and write*), then on cron-job.org add a job every hour at :40 that sends `POST https://api.github.com/repos/discoverymosti/silent-stories/dispatches` with headers `Authorization: Bearer <token>`, `Accept: application/vnd.github+json` and body `{"event_type": "publish-tick"}`. The due check still guarantees one video per window.
 - **Change windows:** edit `WINDOWS` in `scripts/due.py` and the matching `cron` lines in `.github/workflows/publish.yml` (times are UTC).
 
