@@ -175,7 +175,12 @@ def add_tech_news() -> None:
 TECH_RULES = """TECH CHANNEL RULES ("{channel}" explains technology to everyone, without words)
 - Genres: "explainer" = how a technology works; "news" = a real recent tech story (state only what the
   headline says, add general background you are sure of, never invent numbers, dates, names or quotes);
-  "tip" = a practical phone/PC/app/AI tip anyone can try; "product" = what a product does and why it matters.
+  "tip" = a practical phone/PC/app/AI tip anyone can try; "product" = what a product does and why it matters;
+  "list" = a numbered countdown of 4-6 items (e.g. free apps that replace paid ones): scene 1 promises the
+  payoff in money or time saved ("5 free apps, $500 saved"), then one or two scenes per item whose first
+  caption starts with its number ("#1 LibreOffice replaces Microsoft Office"), the paid thing shown crossed
+  out before the free one appears; the last scene sums up. Name only real, well-known products you are sure
+  are free, never star counts or prices you are not sure of.
 - Accuracy first: leave out any detail you are not sure of. Captions explain step by step, like a smart friend.
 - Visuals: clean modern tech look (macro shots of chips and circuits, glowing data, hands using generic
   devices, simple diagram-like compositions). Generic, unbranded devices only: no logos, brand marks,
@@ -219,9 +224,10 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
             "Each idea: one sentence naming the technology and the surprising insight the viewer will get.").replace(
             "Mix genres: about half", "IGNORE: about half").replace(
             "(any country; universal emotions)", "(any country; things people use every day)") + (
-            '\nGenres for this tech channel: about half "explainer" (how a technology works), a quarter "tip" '
-            '(a practical phone/PC/app/AI tip anyone can try) and a quarter "product" (what a kind of product '
-            'or a well-known launch does and why it matters). Only facts you are sure of.')
+            '\nGenres for this tech channel: about half "explainer" (how a technology works), a fifth "tip" '
+            '(a practical phone/PC/app/AI tip anyone can try), a fifth "list" (a numbered countdown of 4-6 '
+            'items, e.g. free apps that replace paid ones, with the money or time saved) and the rest "product" '
+            '(what a kind of product or a well-known launch does and why it matters). Only facts you are sure of.')
     try:
         ideas = json.loads(_strip_fences(ask_ai(prompt)))["ideas"]
     except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
