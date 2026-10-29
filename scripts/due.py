@@ -6,7 +6,8 @@ started several times per publishing window (and optionally by an external timer
 run that gets through makes the video; the others see it in done.txt and stop. Result: one video
 per window, never zero because GitHub skipped a slot, never two.
 
-Manual runs (Run workflow) always go ahead with the format chosen in the form.
+Manual runs (Run workflow) always go ahead with the format chosen in the form, unless "only_if_due"
+(timer mode) is ticked: then they are judged like a timer tick, so an external timer can never double up.
 Writes go=true|false and format=short|film to $GITHUB_OUTPUT.
 """
 from __future__ import annotations
@@ -70,8 +71,9 @@ def planned_time(cron: str, now: datetime) -> datetime | None:
     return None
 
 
-def decide(now: datetime, event: str, manual_format: str, schedule: str = "") -> tuple[bool, str, str]:
-    if event not in ("schedule", "repository_dispatch"):
+def decide(now: datetime, event: str, manual_format: str, schedule: str = "",
+           only_if_due: bool = False) -> tuple[bool, str, str]:
+    if event not in ("schedule", "repository_dispatch") and not only_if_due:
         return True, manual_format or "short", "manual run"
     when = (planned_time(schedule, now) if event == "schedule" else None) or now
     late = f", started {(now - when).total_seconds() / 3600:.1f} h late" if now - when > timedelta(minutes=30) else ""
@@ -89,7 +91,7 @@ def decide(now: datetime, event: str, manual_format: str, schedule: str = "") ->
 
 def main() -> None:
     go, fmt, why = decide(datetime.now(timezone.utc), os.getenv("EVENT", ""), os.getenv("MANUAL_FORMAT", ""),
-                          os.getenv("SCHEDULE", ""))
+                          os.getenv("SCHEDULE", ""), os.getenv("ONLY_IF_DUE", "").lower() == "true")
     print(f"{'GO' if go else 'SKIP'}: {why}")
     if os.getenv("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:

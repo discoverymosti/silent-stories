@@ -1,6 +1,6 @@
 name: Silent Stories - Publish Short
 # what each run did, readable in the Actions list (test previews never upload)
-run-name: "${{ (github.event_name == 'schedule' || github.event_name == 'repository_dispatch') && 'Automatic: uploads only if a video is due' || (inputs.skip_upload && format('Preview only, no upload: {0}', inputs.format) || format('Upload to YouTube: {0}', inputs.format)) }}"
+run-name: "${{ (github.event_name == 'schedule' || github.event_name == 'repository_dispatch' || inputs.only_if_due) && 'Automatic: uploads only if a video is due' || (inputs.skip_upload && format('Preview only, no upload: {0}', inputs.format) || format('Upload to YouTube: {0}', inputs.format)) }}"
 
 on:
   schedule:
@@ -26,6 +26,10 @@ on:
         type: choice
         options: [short, film]
         default: short
+      only_if_due:
+        description: "Timer mode: upload only if this window's video isn't up yet (format and preview are ignored)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -51,6 +55,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
           MANUAL_FORMAT: ${{ inputs.format }}
+          ONLY_IF_DUE: ${{ inputs.only_if_due }}
         run: python3 scripts/due.py
 
       - uses: actions/setup-python@v6
@@ -126,11 +131,11 @@ jobs:
           PAID_BUDGET_USD: ${{ vars.PAID_BUDGET_USD }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           FREE_ONLY: ${{ vars.FREE_ONLY }}
-          SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_upload || 'false' }}
+          SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && !inputs.only_if_due && inputs.skip_upload || 'false' }}
         run: python scripts/pipeline.py
 
       - name: Cross-post to Instagram, Facebook and X
-        if: success() && steps.due.outputs.go == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.skip_upload)
+        if: success() && steps.due.outputs.go == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.skip_upload && !inputs.only_if_due)
         continue-on-error: true
         env:
           YT_PRIVACY: ${{ vars.YT_PRIVACY || 'public' }}
