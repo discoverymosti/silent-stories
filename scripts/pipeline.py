@@ -404,11 +404,11 @@ def gemini_candidates(kind: str) -> list[str]:
         newest = lambda xs: sorted(xs, key=_version_key, reverse=True)
         flash = newest([n for n in pool if "flash" in n and "lite" not in n])
         lite = newest([n for n in pool if "lite" in n])
-        gemma = newest([n for n in names if re.fullmatch(r"gemma-[\d.]+-\d+b-it", n)])  # largest dense Gemma
+        gemma = newest([n for n in names if re.fullmatch(r"gemma-[\d.]+-\d+b(?:-a\d+b)?-it", n)])  # 31B, then 26B MoE
         # every model has its own free quota: mix families so that when the Flash models (the
         # smartest free ones) are busy or used up for the day, Flash-Lite and Gemma still answer.
         # No Pro: Gemini 3.1 Pro / 4 are paid-only and 2.5 Pro is closed to new users (AI check, Oct 2026).
-        pool = flash[:3] + lite[:3] + gemma[:1]
+        pool = flash[:3] + lite[:3] + gemma[:2]
     else:
         pool = sorted([n for n in names if "image" in n and "gemini" in n], key=_version_key, reverse=True)[:5]
     if wanted:
