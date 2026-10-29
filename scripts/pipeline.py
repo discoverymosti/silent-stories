@@ -559,11 +559,16 @@ _cf_ok = True
 
 
 CF_IMAGE_MODEL = os.getenv("CF_IMAGE_MODEL", "@cf/black-forest-labs/flux-2-klein-4b")
+# The thumbnail decides whether people click, so it gets the best model the free allowance can carry:
+# klein 9B costs ~1,360 of the 10,000 free daily neurons per image, klein 4B ~100-160
+# (FLUX.2 [dev] would be ~4,000-6,000: too much for a daily channel).
+CF_BEST_MODEL = os.getenv("CF_BEST_MODEL", "@cf/black-forest-labs/flux-2-klein-9b")
 
 
-def gen_image_cloudflare(prompt: str, dest: Path, seed: int) -> bool:
-    """Cloudflare Workers AI (free daily allowance): FLUX.2 [klein] 4B at the true frame shape,
-    falling back to FLUX.1 [schnell] (square, cropped by the edit) if klein refuses a prompt."""
+def gen_image_cloudflare(prompt: str, dest: Path, seed: int, best: bool = False) -> bool:
+    """Cloudflare Workers AI (free daily allowance): FLUX.2 [klein] 4B at the true frame shape
+    (9B first when best=True), falling back to FLUX.1 [schnell] (square, cropped by the edit)
+    if klein refuses a prompt."""
     global _cf_ok
     acct, token = os.getenv("CF_ACCOUNT_ID"), os.getenv("CF_API_TOKEN")
     if not (_cf_ok and acct and token):
@@ -571,9 +576,10 @@ def gen_image_cloudflare(prompt: str, dest: Path, seed: int) -> bool:
     base = f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run"
     w, h = _gen_size()
     attempts = []
-    if "flux-2" in CF_IMAGE_MODEL:  # FLUX.2 models take multipart form fields, steps fixed at 4
-        attempts.append((CF_IMAGE_MODEL, {"files": {"prompt": (None, prompt[:2048]),
-                                                    "width": (None, str(w)), "height": (None, str(h))}}))
+    for model in dict.fromkeys(([CF_BEST_MODEL] if best else []) + [CF_IMAGE_MODEL]):
+        if "flux-2" in model:  # FLUX.2 models take multipart form fields, steps fixed at 4
+            attempts.append((model, {"files": {"prompt": (None, prompt[:2048]),
+                                               "width": (None, str(w)), "height": (None, str(h))}}))
     attempts.append(("@cf/black-forest-labs/flux-1-schnell", {"json": {
         "prompt": f"{prompt} Centered composition, subject in the middle third."[:2048], "steps": 4}}))
     for model, body in attempts:
@@ -777,12 +783,12 @@ def horde_batch(jobs: dict, minutes: float) -> set:
     return done
 
 
-def gen_image(prompt: str, dest: Path, seed: int) -> str | None:
+def gen_image(prompt: str, dest: Path, seed: int, best: bool = False) -> str | None:
     if dest.exists():
         return "cached"
     if gen_image_gemini(prompt, dest):
         return "gemini"
-    if gen_image_cloudflare(prompt, dest, seed):
+    if gen_image_cloudflare(prompt, dest, seed, best):
         return "cloudflare"
     if gen_image_hf(prompt, dest):
         return "huggingface"
@@ -1110,7 +1116,8 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
         for i, s in enumerate(scenes):
             sources[i] = gen_image(full_prompt(sb, s), imgs[i], base_seed + i)
         if sb.get("thumbnail_prompt"):
-            sources["thumb"] = gen_image(full_prompt(sb, sb["thumbnail_prompt"]), thumb_img, base_seed + 999)
+            sources["thumb"] = gen_image(full_prompt(sb, sb["thumbnail_prompt"]), thumb_img, base_seed + 999,
+                                         best=True)
         missing = {k: (full_prompt(sb, scenes[k] if k != "thumb" else sb["thumbnail_prompt"]),
                        imgs[k] if k != "thumb" else thumb_img) for k, v in sources.items() if not v}
         for k in horde_batch(missing, minutes=80 if FILM else 45):

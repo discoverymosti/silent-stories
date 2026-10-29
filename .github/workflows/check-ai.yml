@@ -14,7 +14,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20  # the AI Horde probe alone may take up to 10 minutes
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
