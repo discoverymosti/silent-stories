@@ -1297,11 +1297,36 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             a, b = t + XF * 0.6, t + s["seconds"] - XF
             lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Cap,,0,0,0,,"
                          f"{{\\fad(280,220)\\t(0,280,\\fscx104\\fscy104)\\t(280,500,\\fscx100\\fscy100)}}{cap}")
+    lines += progress_dots(scenes, starts, end_start)
     a, b = end_start + 0.5, end_start + end_len - 0.3
     lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},End,,0,0,0,,{{\\fad(600,400)}}{ass_escape(ending)}")
     lines.append(f"Dialogue: 0,{ass_time(a + 0.8)},{ass_time(b)},Tag,,0,0,0,,{{\\fad(600,400)}}"
                  f"{ass_escape(CHANNEL_NAME.upper())}")
     dest.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
+
+
+def progress_dots(scenes: list[dict], starts: list[float], end_start: float) -> list[str]:
+    """Countdown ("list") videos: a row of pills under the captions, one per numbered item ("#1 ...");
+    items reached so far are filled, so viewers see how many are left and stay for the last one."""
+    nums = [int(m.group(1)) if (m := re.match(r"\s*#\s*0*(\d{1,2})\b", s.get("caption", ""))) else 0
+            for s in scenes]
+    n = max(nums, default=0)
+    if not 3 <= n <= 12 or set(nums) - {0} != set(range(1, n + 1)):
+        return []  # not a clean countdown: no bar rather than a wrong one
+    w, h, gap = (48, 16, 14) if FILM else (64, 20, 18)
+    x0, y = (W - (n * w + (n - 1) * gap)) // 2, (H - 70) if FILM else (H - 470)
+    first = next(i for i, x in enumerate(nums) if x)
+    lines, seen = [], set()
+    for i in range(first, len(scenes)):
+        seen.add(nums[i] or next(iter(seen)))  # counts up or down alike: fill one pill per item shown
+        cur = len(seen)
+        a = starts[i] + (XF * 0.6 if i > first else 0)
+        b = starts[i + 1] + XF * 0.6 if i + 1 < len(scenes) else end_start
+        for k in range(n):
+            fill = "\\1c&H33E6FF&\\1a&H00&" if k < cur else "\\1c&HFFFFFF&\\1a&H90&"
+            lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Cap,,0,0,0,,{{\\an7\\pos({x0 + k * (w + gap)},{y})"
+                         f"\\bord3\\shad0\\3c&H000000&{fill}\\p1}}m 0 0 l {w} 0 {w} {h} 0 {h}{{\\p0}}")
+    return lines
 
 
 _C, _G, _AM, _F = (261.6, 329.6, 392.0), (196.0, 246.9, 293.7), (220.0, 261.6, 329.6), (174.6, 220.0, 261.6)
