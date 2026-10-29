@@ -49,7 +49,7 @@ CLAUDE_MODEL = os.getenv("CLAUDE_MODEL") or "claude-opus-5-5"
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")  # empty = auto-pick newest
 GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "")  # empty = auto-pick newest
 VISUAL_MODE = os.getenv("VISUAL_MODE", "ai").lower()  # ai | stock
-PRIVACY = os.getenv("YT_PRIVACY", "private")
+PRIVACY = os.getenv("YT_PRIVACY") or "public"  # set the YT_PRIVACY variable to "private" to review first
 SKIP_UPLOAD = os.getenv("SKIP_UPLOAD", "false").lower() == "true"
 CHANNEL_TAG = os.getenv("CHANNEL_HASHTAG", "#DiscoveryMosti")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME", "DiscoveryMosti")
@@ -1487,6 +1487,18 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
     except HttpError as e:
         print(f"Thumbnail not set ({e.status_code}). Verify your channel phone number at "
               f"youtube.com/verify to enable custom thumbnails.")
+    # what YouTube really did: uploads from a Google Cloud project that hasn't passed YouTube's API
+    # audit are locked to private whatever was asked
+    meta["privacy"] = resp["status"]["privacyStatus"]
+    try:
+        items = yt.videos().list(part="status", id=vid).execute().get("items") or []
+        meta["privacy"] = items[0]["status"]["privacyStatus"] if items else meta["privacy"]
+    except (HttpError, KeyError) as e:
+        print(f"  could not re-read the video's status ({e})")
+    if meta["privacy"] != PRIVACY:
+        print(f"WARNING: YouTube keeps this video {meta['privacy']} although {PRIVACY} was asked. Usually the "
+              "Google Cloud project still needs YouTube's API audit (README: Good to know); until then, "
+              "publish each video in YouTube Studio.")
     return vid
 
 
@@ -1543,7 +1555,7 @@ def main() -> int:
     vid = upload(final, thumb, meta)
     mark_done(idea, vid)
     # crosspost.py (next workflow step) shares this upload on Instagram / Facebook / X
-    meta.update(report=report, format=FORMAT, privacy=PRIVACY,
+    meta.update(report=report, format=FORMAT, privacy=meta.get("privacy", PRIVACY),
                 youtube_url=f"https://youtu.be/{vid}" if FILM else f"https://youtube.com/shorts/{vid}")
     (OUT / "metadata.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     return 0
