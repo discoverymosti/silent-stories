@@ -116,7 +116,7 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          YT_PRIVACY: ${{ vars.YT_PRIVACY || 'private' }}
+          YT_PRIVACY: ${{ vars.YT_PRIVACY || 'public' }}
           CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'DiscoveryMosti' }}
           CHANNEL_HASHTAG: ${{ vars.CHANNEL_HASHTAG || '#DiscoveryMosti' }}
           VIDEO_FORMAT: ${{ steps.due.outputs.format }}
@@ -133,7 +133,7 @@ jobs:
         if: success() && steps.due.outputs.go == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.skip_upload)
         continue-on-error: true
         env:
-          YT_PRIVACY: ${{ vars.YT_PRIVACY || 'private' }}
+          YT_PRIVACY: ${{ vars.YT_PRIVACY || 'public' }}
           META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
           X_API_KEY: ${{ secrets.X_API_KEY }}
           X_API_SECRET: ${{ secrets.X_API_SECRET }}

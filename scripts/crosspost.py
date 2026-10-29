@@ -121,8 +121,9 @@ def main() -> int:
     if not meta.get("youtube_url"):
         print("Video was not uploaded to YouTube - nothing to cross-post.")
         return 0
-    if os.getenv("YT_PRIVACY", "private") != "public" and os.getenv("CROSSPOST_PRIVATE") != "true":
-        print("YouTube upload is private (review first) - skipping cross-posting.")
+    privacy = meta.get("privacy") or os.getenv("YT_PRIVACY", "private")  # what YouTube really set
+    if privacy != "public" and os.getenv("CROSSPOST_PRIVATE") != "true":
+        print(f"YouTube upload is {privacy} - skipping cross-posting.")
         return 0
     film = meta.get("format") == "film"
     video = OUT / "short.mp4"

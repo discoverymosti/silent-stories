@@ -39,8 +39,9 @@ The file's header walks you through the Google Cloud console (enable YouTube Dat
 **Actions → Silent Stories - Publish Short → Run workflow** (keep *Preview only* ticked). After about 3 minutes, download `short-N` from the run's Artifacts.
 
 ### 4. Go live
-- Run once with *Preview only* unticked. The Short uploads as **private**. Check it in YouTube Studio.
-- Happy? Repo → Settings → Variables → add `YT_PRIVACY` = `public`. From then on it posts daily on its own.
+- Run once with *Preview only* unticked. The Short uploads as **public** and from then on it posts on its own in every window.
+- Want to review videos first? Repo → Settings → Variables → add `YT_PRIVACY` = `private`, then publish each one in YouTube Studio.
+- If the log says *YouTube keeps this video private although public was asked*, your Google Cloud project still needs YouTube's API audit (see *Good to know*).
 
 ## Cross-posting: Instagram, Facebook Page, X
 After each **public** YouTube upload the workflow also posts:
@@ -48,7 +49,7 @@ After each **public** YouTube upload the workflow also posts:
 - **Facebook Page:** the Short as a Page Reel, the weekly film as a Page video
 - **X:** title + hashtags + YouTube link
 
-Nothing is cross-posted while `YT_PRIVACY` is `private`, so review uploads stay private. Each platform is optional and a failure on one never stops the others.
+Nothing is cross-posted while the YouTube video is private (`YT_PRIVACY` = `private`, or YouTube locked it), so review uploads stay private. Each platform is optional and a failure on one never stops the others.
 
 **Facebook Page + Instagram (one-time, ~15 min, free):**
 1. Instagram must be a **Professional** account (Creator or Business) **linked to your Facebook Page** (Instagram → Settings → Accounts Center, or Page settings → Linked accounts).
@@ -87,14 +88,22 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 ## Daily use
 - **Ideas refill themselves:** when `stories.txt` drops below 5 ideas (or `films.txt` below 2), the AI adds fresh original ones that don't repeat past videos. You can still **add your own** (`genre | idea`), editing on github.com works fine. Each upload removes the top line and logs the link in `done.txt`.
 - **Better music:** drop royalty-free mp3s in `music/` (see `music/README.md`). Without them, a generated ambient pad is used.
-- **Never misses, never doubles:** GitHub can delay or drop scheduled runs when it is busy (this repo has seen 3.5 h delays and skipped slots), so every publishing window gets 5-6 tries an hour apart. Each try first runs `scripts/due.py`, which reads `done.txt` in seconds: the first try that gets through makes the video, the others see it is up and stop. Windows (UTC): Shorts 01:00-07:00 Mon-Sat and 14:00-20:00 daily, film Sunday 16:00-22:00. In the Actions list these runs are called *"Automatic: uploads only if a video is due"*; most of them finish in seconds with nothing to do, which is normal.
+- **Never misses, never doubles:** GitHub can delay or drop scheduled runs when it is busy (this repo has seen 3.5 h delays and skipped slots), so every publishing window gets 5-6 tries an hour apart. Each try first runs `scripts/due.py`, which reads `done.txt` in seconds: the first try that gets through makes the video, the others see it is up and stop. Exactly one video per window:
+
+  | Window (IST) | Window (UTC) | Video | Tries |
+  |---|---|---|---|
+  | 06:30 – 12:30, Mon–Sat | 01:00 – 07:00 | Short | 5, hourly |
+  | 19:30 – 01:30, daily | 14:00 – 20:00 | Short | 6, hourly |
+  | Sunday 21:30 – 03:30 | Sunday 16:00 – 22:00 | weekly film | 6, hourly |
+
+  A try that GitHub starts late still counts for the window it was planned for. In the Actions list these runs are called *"Automatic: uploads only if a video is due"*; most of them finish in seconds with nothing to do, which is normal.
 - **Exact timing (optional, free):** if GitHub keeps skipping, let a free cron service trigger the tries instead. Create a fine-grained GitHub token (Settings → Developer settings → Fine-grained tokens → only this repo → *Contents: Read and write*), then on cron-job.org add a job every hour at :40 that sends `POST https://api.github.com/repos/discoverymosti/silent-stories/dispatches` with headers `Authorization: Bearer <token>`, `Accept: application/vnd.github+json` and body `{"event_type": "publish-tick"}`. The due check still guarantees one video per window.
 - **Change windows:** edit `WINDOWS` in `scripts/due.py` and the matching `cron` lines in `.github/workflows/publish.yml` (times are UTC).
 
 ## Optional variables
 | Variable | Default |
 |---|---|
-| `YT_PRIVACY` | `private` |
+| `YT_PRIVACY` | `public` (`private` = upload for review, publish in YouTube Studio) |
 | `GEMINI_MODEL` | auto (newest Gemini Flash) |
 | `GEMINI_IMAGE_MODEL` | auto (newest Gemini image model) |
 | `VISUAL_MODE` | `ai` (original AI images) or `stock` (Pixabay/Pexels) |
