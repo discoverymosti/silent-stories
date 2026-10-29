@@ -24,6 +24,12 @@ if os.getenv("GEMINI_API_KEY"):
         rows.append(("text", "gemini", "OK"))
     except SystemExit as e:
         rows.append(("text", "gemini", f"FAIL {str(e)[:80]}"))
+    for n in [m for m in p.gemini_candidates("text") if m.startswith("gemma")]:  # does the free fallback write JSON?
+        try:
+            p.ask_gemini(PROMPT, [n])
+            rows.append(("text", n, "OK"))
+        except SystemExit as e:
+            rows.append(("text", n, f"FAIL {str(e)[:80]}"))
     # every Gemini model this key can call, and do the newest Pro (smartest) models answer for free?
     try:
         gk = {"x-goog-api-key": os.environ["GEMINI_API_KEY"]}

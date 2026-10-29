@@ -135,7 +135,7 @@ If the main provider is busy or out of free quota, the next one takes over autom
 | `POLLINATIONS_TOKEN` | images and text (daily free allowance; without a token only ~1 image) | pollinations.ai → sign in → API token |
 | `AI_HORDE_KEY` | images: queue priority on AI Horde's free community GPUs (works without a key too) | aihorde.net → Register (free) |
 
-Built in, no signup: **Pollinations** text and images, and **Cloudflare text models** (reuse your Cloudflare key, last resort because they share the image allowance). Gemini tries Flash, Flash-Lite and Pro models, each with its own free quota.
+Built in, no signup: **Pollinations** text and images, and **Cloudflare text models** (reuse your Cloudflare key, last resort because they share the image allowance). Gemini tries the newest Flash models (the smartest free ones), then Flash-Lite and Gemma 4, each with its own free quota; Gemini 3.1 Pro and Gemini 4 are paid-only, so they are never called.
 
 Order: text = Gemini → Groq → OpenRouter → Pollinations → Cloudflare; images = Cloudflare **FLUX.2 [klein] 4B** (true 9:16 / 16:9 frames; FLUX.1 [schnell] if klein refuses a prompt; the thumbnail, which decides clicks, gets the bigger **FLUX.2 [klein] 9B** - about 1,360 of the 10,000 free daily neurons, versus ~100-160 per 4B scene) → Hugging Face → Together → Pollinations → **AI Horde** (free volunteer GPUs, no signup; every image still missing is sent at once and they run in parallel, Z-Image-Turbo / FLUX.1-schnell / SDXL, commercial-use licences only) → (stock footage if `PIXABAY_API_KEY`/`PEXELS_API_KEY`). Run **Actions → Check free AI providers** to see which ones work.
 

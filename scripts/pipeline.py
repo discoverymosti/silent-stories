@@ -281,10 +281,11 @@ def gemini_candidates(kind: str) -> list[str]:
         newest = lambda xs: sorted(xs, key=_version_key, reverse=True)
         flash = newest([n for n in pool if "flash" in n and "lite" not in n])
         lite = newest([n for n in pool if "lite" in n])
-        pro = newest([n for n in pool if "pro" in n and "flash" not in n])
-        # every model has its own free quota: mix families so that when the Flash models are
-        # busy or used up for the day, Flash-Lite (larger free quota) and Pro still answer
-        pool = flash[:3] + lite[:3] + pro[:1]
+        gemma = newest([n for n in names if re.fullmatch(r"gemma-[\d.]+-\d+b-it", n)])  # largest dense Gemma
+        # every model has its own free quota: mix families so that when the Flash models (the
+        # smartest free ones) are busy or used up for the day, Flash-Lite and Gemma still answer.
+        # No Pro: Gemini 3.1 Pro / 4 are paid-only and 2.5 Pro is closed to new users (AI check, Oct 2026).
+        pool = flash[:3] + lite[:3] + gemma[:1]
     else:
         pool = sorted([n for n in names if "image" in n and "gemini" in n], key=_version_key, reverse=True)[:5]
     if wanted:
@@ -299,8 +300,8 @@ def pick_gemini_model(kind: str) -> str | None:
     return c[0] if c else None
 
 
-def ask_gemini(prompt: str) -> str:
-    models = gemini_candidates("text")
+def ask_gemini(prompt: str, models: list[str] | None = None) -> str:
+    models = models or gemini_candidates("text")
     if not models:
         raise SystemExit("No Gemini text model available for this API key.")
     last = ""
@@ -311,7 +312,8 @@ def ask_gemini(prompt: str) -> str:
                     f"{GEMINI_BASE}/models/{model}:generateContent",
                     headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
                     json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                          "generationConfig": {"responseMimeType": "application/json", "temperature": 0.9}},
+                          "generationConfig": {"temperature": 0.9} | ({} if model.startswith("gemma") else
+                                                                     {"responseMimeType": "application/json"})},
                     timeout=180,
                 )
             except requests.RequestException as e:
@@ -321,8 +323,8 @@ def ask_gemini(prompt: str) -> str:
             if r.status_code == 200:
                 try:
                     parts = r.json()["candidates"][0]["content"]["parts"]
-                    text = "".join(p.get("text", "") for p in parts)
-                    json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip()))
+                    text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+                    json.loads(_strip_fences(text))
                     print(f"  answer by {model}")
                     return text
                 except (KeyError, IndexError, ValueError) as e:
