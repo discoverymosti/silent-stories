@@ -22,7 +22,9 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 import requests
 
 ROOT = Path(__file__).resolve().parent.parent
-TOKEN_FILE = ROOT / "yt_token.enc"
+# CHANNEL=tech saves the second channel's connection (Discovery Mosti TECH) in channels/tech/
+CHANNEL = (os.getenv("CHANNEL") or "main").strip().lower()
+TOKEN_FILE = (ROOT if CHANNEL == "main" else ROOT / "channels" / CHANNEL) / "yt_token.enc"
 REDIRECT = "http://localhost"
 # upload + read video stats; the revenue report only lets the pipeline switch to paid AI models by
 # itself once the channel earns (AI_TIER=auto). Amounts are never printed or stored.

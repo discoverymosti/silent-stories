@@ -1,0 +1,13 @@
+# Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, news).
+# The top line is used next. When fewer than 5 are left the AI adds more, and one fresh tech news
+# story (Hacker News front page) is put on top at most once a day.
+explainer | How Wi-Fi sends a video through walls: invisible radio waves, packets and the router's secret map
+explainer | How a phone camera makes night photos bright: dozens of quick shots stacked into one
+tip | The phone setting that makes your battery last years longer: stop charging at 80 percent
+explainer | How a computer chip with billions of switches is printed with light
+explainer | How AI chatbots write: predicting the next word, one word at a time
+tip | Find any lost file in seconds: the search shortcut most computer users never use
+product | What makes a foldable phone screen bend thousands of times without cracking
+explainer | How GPS knows where you are using satellites and a tiny time difference
+explainer | Why fast chargers do not burn your phone: the charger and phone negotiate power
+tip | Two-step login: the free setting that stops most account hacks

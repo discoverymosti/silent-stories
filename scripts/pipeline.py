@@ -39,8 +39,13 @@ FILM = FORMAT == "film"
 # VIDEO_FORMAT=teaser: right after the weekly film is up, a vertical teaser Short cut from the
 # film's own pictures (new hook and captions, links to the film): one more upload, no new images
 TEASER = FORMAT == "teaser"
-STORIES = ROOT / ("films.txt" if FILM else "stories.txt")
-DONE = ROOT / "done.txt"
+# CHANNEL=tech: the second channel, Discovery Mosti TECH (silent tech explainers). It keeps its own
+# idea queue, upload log and YouTube connection in channels/tech/; the main channel uses the repo root.
+CHANNEL = (os.getenv("CHANNEL") or "main").strip().lower()
+TECH = CHANNEL == "tech"
+CH_DIR = ROOT if CHANNEL == "main" else ROOT / "channels" / CHANNEL
+STORIES = CH_DIR / ("films.txt" if FILM else "stories.txt")
+DONE = CH_DIR / "done.txt"
 MUSIC_DIR = ROOT / "music"
 OUT = ROOT / "out"
 
@@ -137,8 +142,53 @@ Do not repeat or closely resemble any of these existing ideas:
 Return ONLY JSON: {{"ideas": [{{"genre": str, "idea": str}}]}}"""
 
 
+def add_tech_news() -> None:
+    """Discovery Mosti TECH: put one fresh, widely discussed tech story (Hacker News front page, free,
+    no key) at the top of the queue, at most one news Short a day."""
+    since = datetime.now(timezone.utc) - timedelta(hours=20)
+    log = DONE.read_text(encoding="utf-8") if DONE.exists() else ""
+    for line in log.splitlines():
+        parts = [x.strip() for x in line.split(" | ")]
+        if len(parts) >= 4 and parts[0].startswith("Tech news:"):
+            try:
+                if datetime.strptime(parts[-2], "%Y-%m-%dT%H:%MZ").replace(tzinfo=timezone.utc) >= since:
+                    return
+            except ValueError:
+                pass
+    queue = STORIES.read_text(encoding="utf-8")
+    if "| Tech news:" in queue:
+        return
+    try:
+        hn = "https://hacker-news.firebaseio.com/v0"
+        for sid in requests.get(f"{hn}/topstories.json", timeout=20).json()[:30]:
+            it = requests.get(f"{hn}/item/{sid}.json", timeout=20).json() or {}
+            title, url = " ".join(str(it.get("title", "")).replace("|", "/").split()), it.get("url", "")
+            if (it.get("type") == "story" and url and it.get("score", 0) >= 200
+                    and not re.match(r"(Ask|Show|Tell) HN", title) and title[:60] not in log):
+                STORIES.write_text(f"news | Tech news: {title} (source: {url})\n" + queue, encoding="utf-8")
+                print(f"  tech news added: {title}")
+                return
+    except (requests.RequestException, ValueError) as e:
+        print(f"  tech news unavailable ({e})")
+
+
+TECH_RULES = """TECH CHANNEL RULES ("{channel}" explains technology to everyone, without words)
+- Genres: "explainer" = how a technology works; "news" = a real recent tech story (state only what the
+  headline says, add general background you are sure of, never invent numbers, dates, names or quotes);
+  "tip" = a practical phone/PC/app/AI tip anyone can try; "product" = what a product does and why it matters.
+- Accuracy first: leave out any detail you are not sure of. Captions explain step by step, like a smart friend.
+- Visuals: clean modern tech look (macro shots of chips and circuits, glowing data, hands using generic
+  devices, simple diagram-like compositions). Generic, unbranded devices only: no logos, brand marks,
+  real product photos or screenshots of real apps.
+- The description's last line invites viewers to subscribe to {channel} for tech explained without words.
+"""
+
+
+
 def refill_queue(min_left: int = 2 if FILM else 5) -> None:
     """Never run dry: when few ideas are left, ask the AI for fresh original ones."""
+    if TECH:
+        add_tech_news()
     lines = STORIES.read_text(encoding="utf-8").splitlines()
     left = [l for l in lines if l.strip() and not l.lstrip().startswith("#")]
     if len(left) >= min_left:
@@ -162,6 +212,16 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
         'Mix genres: about half "story" (emotional micro-drama), a quarter "explainer" (how something '
         'works) and a quarter "fact" (surprising true fact, must be accurate).',
         existing="\n".join(f"- {e}" for e in existing[-60:]) or "- (none)")
+    if TECH:
+        prompt = prompt.replace("a worldwide YouTube channel of SILENT stories", "a worldwide YouTube channel of "
+                                "SILENT tech explainers").replace(
+            "Each idea: one sentence with a clear character, situation and emotional or surprising payoff.",
+            "Each idea: one sentence naming the technology and the surprising insight the viewer will get.").replace(
+            "Mix genres: about half", "IGNORE: about half").replace(
+            "(any country; universal emotions)", "(any country; things people use every day)") + (
+            '\nGenres for this tech channel: about half "explainer" (how a technology works), a quarter "tip" '
+            '(a practical phone/PC/app/AI tip anyone can try) and a quarter "product" (what a kind of product '
+            'or a well-known launch does and why it matters). Only facts you are sure of.')
     try:
         ideas = json.loads(_strip_fences(ask_ai(prompt)))["ideas"]
     except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
@@ -666,6 +726,12 @@ def storyboard(genre: str, idea: str) -> dict:
         start, end = prompt.index("STORY RULES"), prompt.index("VISUAL RULES")
         prompt = (prompt[:start] + FILM_RULES + "\n" + prompt[end:]).replace(
             "YouTube\nShorts channel", "YouTube\nchannel").replace("vertical image", "widescreen 16:9 image")
+    if TECH:
+        prompt = prompt.replace('("story" = emotional micro-drama / short film, "explainer" = how something\n'
+                                '                  works, "fact" = surprising true fact told visually)',
+                                "(see TECH CHANNEL RULES)").replace(
+            "VISUAL RULES", TECH_RULES.format(channel=CHANNEL_NAME) + "\nVISUAL RULES", 1).replace(
+            "invites viewers to subscribe for more silent stories", f"invites viewers to subscribe to {CHANNEL_NAME}")
     for attempt in range(2):  # an incomplete storyboard gets one fresh try
         try:
             sb = json.loads(_strip_fences(ask_ai(prompt)))
@@ -679,6 +745,8 @@ def storyboard(genre: str, idea: str) -> dict:
         raise SystemExit(f"Storyboard unusable after 2 tries: {problem}")
     sb["title"] = " ".join(str(sb["title"]).split())
     sb["description"] = str(sb.get("description") or idea).strip()
+    if (src := re.search(r"\(source: (\S+)\)", idea)) and src.group(1) not in sb["description"]:
+        sb["description"] += f"\nSource: {src.group(1)}"
     sb["ending"] = str(sb.get("ending") or "Some stories need no words.").strip()
     if sb.get("music_mood") not in CHORDS:
         sb["music_mood"] = "warm"
@@ -1430,14 +1498,17 @@ def build_metadata(sb: dict, report: dict, genre: str = "story") -> dict:
     hashtags = [("#" + re.sub(r"[^\w]", "", h.lstrip("#"))) for h in sb.get("hashtags", []) if h.strip()]
     hashtags = list(dict.fromkeys(hashtags + [CHANNEL_TAG, "#ShortFilm" if FILM else "#Shorts"]))[:6]
     tags, total = [], 0
-    for t in [clean_tag(x) for x in sb.get("tags", [])] + [CHANNEL_NAME, "silent stories", "no words story", "short film"]:
+    extra = ["tech explained", "technology", "tech shorts"] if TECH else ["silent stories", "no words story", "short film"]
+    for t in [clean_tag(x) for x in sb.get("tags", [])] + [CHANNEL_NAME] + extra:
         if t and t.lower() not in (x.lower() for x in tags) and total + len(t) + 3 < 480:
             tags.append(t)
             total += len(t) + 3
     visuals = "AI-generated (original)" if report.get("ai") else "Pixabay / Pexels stock (royalty-free)"
+    tagline = "tech explained without words, for everyone, everywhere" if TECH else \
+        "stories without words, for everyone, everywhere"
     description = (f"{sb['description'].strip()}\n\n"
                    f"{' '.join(hashtags)}\n\n"
-                   f"🎬 {CHANNEL_NAME}: stories without words, for everyone, everywhere.\n"
+                   f"🎬 {CHANNEL_NAME}: {tagline}.\n"
                    f"Visuals: {visuals} · Music: {report.get('music', 'original')}")
     title = sb["title"].strip()[:90]
     return {
@@ -1448,7 +1519,7 @@ def build_metadata(sb: dict, report: dict, genre: str = "story") -> dict:
         "social_caption": sb.get("social_caption", ""),
         "synthetic": bool(report.get("ai")),
         # explainers/facts are educational; stories are film
-        "category_id": os.getenv("YT_CATEGORY") or ("27" if genre in ("explainer", "fact") else "1"),
+        "category_id": os.getenv("YT_CATEGORY") or ("28" if TECH else "27" if genre in ("explainer", "fact") else "1"),
     }
 
 
@@ -1491,7 +1562,7 @@ def refresh_token() -> str:
     """YT_REFRESH_TOKEN secret, else the token saved by the Connect YouTube workflow."""
     if os.getenv("YT_REFRESH_TOKEN"):
         return os.environ["YT_REFRESH_TOKEN"]
-    enc = ROOT / "yt_token.enc"
+    enc = CH_DIR / "yt_token.enc"
     if not enc.exists():
         sys.exit("YouTube not connected: run the 'Connect YouTube channel' workflow "
                  "or set the YT_REFRESH_TOKEN secret.")
@@ -1523,6 +1594,12 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
     from googleapiclient.http import MediaFileUpload
 
     yt = youtube_client()
+    if TECH:  # never post a TECH video on the main channel (wrong account picked when connecting)
+        mine = yt.channels().list(part="snippet", mine=True).execute().get("items") or [{}]
+        name = mine[0].get("snippet", {}).get("title", "?")
+        if "tech" not in name.lower():
+            sys.exit(f"The connected channel is '{name}', not Discovery Mosti TECH: run 'Connect YouTube "
+                     "channel' with channel=tech and pick the TECH channel. Nothing was uploaded.")
     body = {
         "snippet": {
             "title": meta["title"],
