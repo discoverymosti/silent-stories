@@ -1534,13 +1534,7 @@ def build_metadata(sb: dict, report: dict, genre: str = "story") -> dict:
         if t and t.lower() not in (x.lower() for x in tags) and total + len(t) + 3 < 480:
             tags.append(t)
             total += len(t) + 3
-    visuals = "AI-generated (original)" if report.get("ai") else "Pixabay / Pexels stock (royalty-free)"
-    tagline = "tech explained without words, for everyone, everywhere" if TECH else \
-        "stories without words, for everyone, everywhere"
-    description = (f"{sb['description'].strip()}\n\n"
-                   f"{' '.join(hashtags)}\n\n"
-                   f"🎬 {CHANNEL_NAME}: {tagline}.\n"
-                   f"Visuals: {visuals} · Music: {report.get('music', 'original')}")
+    description = f"{sb['description'].strip()}\n\n{' '.join(hashtags)}"
     title = sb["title"].strip()[:90]
     return {
         "title": title,
