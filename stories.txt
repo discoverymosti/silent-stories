@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-fact | Honey never spoils: sealed jars from ancient tombs are still edible
 story | A girl practises dancing alone on a rooftop every evening until the whole street starts watching
 explainer | How coffee gets from a red cherry on a hill to your morning cup
 story | A grandfather teaches his grandson to ride a bicycle, then years later the roles reverse with a wheelchair
