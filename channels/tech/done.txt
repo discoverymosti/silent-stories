@@ -7,3 +7,4 @@ Tech news: My favourite PowerMac is a Nintendo Wii (source: https://virtuallyfun
 4 free tools already on your phone or computer that do the job of paid apps: built-in screen recorder, document scanner in the camera, offline maps, and the password manager | https://youtube.com/shorts/uif-eUbiwqg | 2026-10-31T19:59Z | short
 Tech news: Norway makes shithouses great again (source: https://www.visitnorway.com/plan-your-trip/travel-tips-a-z/norwegian-scenic-routes/worlds-best-toilets/) | https://youtube.com/shorts/eddAVwGew1g | 2026-11-01T14:35Z | short
 How a phone camera makes night photos bright: dozens of quick shots stacked into one | https://youtube.com/shorts/ljN7VhlGOYY | 2026-11-01T23:08Z | short
+Tech news: Postgres 19 is late because so many more bugs are being found now (source: http://rhaas.blogspot.com/2026/10/postgres-19-is-late-and-its-ais-fault.html) | https://youtube.com/shorts/6c7caf9RJWk | 2026-11-02T17:47Z | short
