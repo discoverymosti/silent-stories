@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | A lost child in a busy market, a stranger kneels down, and a small act brings a family back together
 explainer | How paper is made: from forest to pulp to the page you write on
 story | A boy collects plastic bottles from the beach every day; at first alone, then never alone
 fact | Octopuses have three hearts and blue blood
