@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | A boy collects plastic bottles from the beach every day; at first alone, then never alone
 fact | Octopuses have three hearts and blue blood
 story | A night-shift nurse's coffee goes cold every night until a patient's family leaves her a warm cup
 explainer | How a lighthouse guides ships through the dark
