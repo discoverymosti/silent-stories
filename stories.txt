@@ -2,7 +2,16 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | A night-shift nurse's coffee goes cold every night until a patient's family leaves her a warm cup
 explainer | How a lighthouse guides ships through the dark
 story | Two strangers share one umbrella in sudden rain and walk the same way for longer than they need to
 fact | Bananas grow pointing up toward the sun
+story | An elderly watchmaker painstakingly repairs a broken pocket watch for a customer, only to discover it belonged to his own late father.
+story | A shy office worker leaves a small anonymous plant on his colleague's desk every week, eventually turning the grey cubicle into a vibrant garden.
+story | A stray cat waits outside a bakery every evening for the baker to slide a piece of warm crust through the back door.
+story | A young girl spends her afternoons drawing chalk portraits of neighbors on the sidewalk, until they surprise her by drawing one of her.
+story | A retired fisherman spends his mornings mending nets he no longer uses, until a group of local children asks him to teach them how to cast them.
+explainer | The process of glassblowing: how a glob of molten sand is transformed into a delicate vase through precise breath and gravity.
+explainer | The anatomy of a honeycomb: how bees construct perfect hexagonal cells to maximize space and minimize the wax required.
+fact | Trees communicate through an underground fungal network, sharing nutrients with younger saplings to help them survive in the shade.
+fact | Sea otters hold hands while they sleep in the water to prevent drifting apart from their families during the night.
+fact | The oldest living organism on Earth is a clonal colony of quaking aspen trees that has been sharing the same root system for 80,000 years.
