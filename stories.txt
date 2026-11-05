@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-explainer | How a lighthouse guides ships through the dark
 story | Two strangers share one umbrella in sudden rain and walk the same way for longer than they need to
 fact | Bananas grow pointing up toward the sun
 story | An elderly watchmaker painstakingly repairs a broken pocket watch for a customer, only to discover it belonged to his own late father.
