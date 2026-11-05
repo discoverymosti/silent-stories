@@ -12,3 +12,4 @@ The phone setting that makes your battery last years longer: stop charging at 80
 Tech news: The 'Astra can read and write weights to improve Qwen' post is misleading (source: https://honnibal.dev/blog/astra-read-write-misleading) | https://youtube.com/shorts/_2ltgLk8KfY | 2026-11-03T15:42Z | short
 How a computer chip with billions of switches is printed with light | https://youtube.com/shorts/6m6K1HNvGoU | 2026-11-04T00:22Z | short
 Tech news: AI is forcing us to pay off 40 years of technical debt (source: https://spectrum.ieee.org/ai-in-cybersecurity-php2shell-vulnerability) | https://youtube.com/shorts/xg8ezE8rbXk | 2026-11-04T15:52Z | short
+How AI chatbots write: predicting the next word, one word at a time | https://youtube.com/shorts/znKp9AM9o-s | 2026-11-05T00:38Z | short
