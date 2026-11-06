@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-fact | Bananas grow pointing up toward the sun
 story | An elderly watchmaker painstakingly repairs a broken pocket watch for a customer, only to discover it belonged to his own late father.
 story | A shy office worker leaves a small anonymous plant on his colleague's desk every week, eventually turning the grey cubicle into a vibrant garden.
 story | A stray cat waits outside a bakery every evening for the baker to slide a piece of warm crust through the back door.
