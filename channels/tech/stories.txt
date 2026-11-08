@@ -1,7 +1,6 @@
 # Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, news).
 # The top line is used next. When fewer than 5 are left the AI adds more, and one fresh tech news
 # story (Hacker News front page) is put on top at most once a day.
-explainer | Why fast chargers do not burn your phone: the charger and phone negotiate power
 tip | Two-step login: the free setting that stops most account hacks
 explainer | How active noise-canceling headphones erase background sound by generating mirrored sound waves that physically cancel ambient noise in mid-air.
 explainer | How OLED smartphone displays create true pitch-black images by completely turning off individual microscopic light pixels instead of blocking a backlight.
