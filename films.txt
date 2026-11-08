@@ -2,6 +2,5 @@
 # Worldwide audience: universal emotions, any country. Give each film a character with a goal,
 # an obstacle, a turning point and an emotional payoff. The top line is made next.
 
-story | Letters to Nobody: a retired postman keeps delivering handwritten letters to a widow who stopped receiving mail, until she discovers who has been writing them
 story | The Last Train Home: a worker saves coins all year for a train ticket home for the holidays, loses his wallet on the platform, and a crowd of strangers quietly changes his night
 story | The Lighthouse Keeper's Daughter: a girl keeps her late father's lighthouse burning through one terrible storm while a small fishing boat searches for the shore
