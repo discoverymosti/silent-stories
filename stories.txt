@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | A retired fisherman spends his mornings mending nets he no longer uses, until a group of local children asks him to teach them how to cast them.
 explainer | The process of glassblowing: how a glob of molten sand is transformed into a delicate vase through precise breath and gravity.
 explainer | The anatomy of a honeycomb: how bees construct perfect hexagonal cells to maximize space and minimize the wax required.
 fact | Trees communicate through an underground fungal network, sharing nutrients with younger saplings to help them survive in the shade.
