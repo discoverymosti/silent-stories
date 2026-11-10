@@ -2,7 +2,16 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-explainer | The anatomy of a honeycomb: how bees construct perfect hexagonal cells to maximize space and minimize the wax required.
 fact | Trees communicate through an underground fungal network, sharing nutrients with younger saplings to help them survive in the shade.
 fact | Sea otters hold hands while they sleep in the water to prevent drifting apart from their families during the night.
 fact | The oldest living organism on Earth is a clonal colony of quaking aspen trees that has been sharing the same root system for 80,000 years.
+story | A stray kitten sits outside a quiet pottery studio every afternoon watching the artisan work, until one day the potter molds a tiny custom ceramic dish just for the kitten's daily milk.
+story | An elderly cobbler secretly mends the worn-out shoes of a hardworking student while she studies at the library, leaving them freshly polished outside her door without saying a word.
+story | A street sweeper painstakingly arranges fallen autumn leaves every morning to create a massive leaf-art portrait for an elderly neighbor watching from her window.
+story | A lonely train conductor shares his packed lunch with a stray dog at the end of the line every evening, until the day the dog arrives carrying the conductor's lost pocket key ring.
+story | A bus driver notices a shy boy drawing flowers on foggy bus windows every morning, so he leaves a brand-new sketchpad and pencils on the boy's usual seat on the last day of school.
+explainer | How stained glass windows are created: from cutting raw sheets of colored glass to wrapping lead cames and soldering them into luminous art.
+explainer | How neon signs are handcrafted: bending hollow glass tubes over open gas flames, sealing electrodes, and charging them with glowing noble gas.
+explainer | How a mechanical wristwatch works: a coiled mainspring steadily releases energy through micro-gears and a tiny oscillating wheel to count time without electricity.
+fact | Thousands of starlings execute mesmerizing aerial murmurations by constantly reacting to just seven nearest neighbors, creating fluid shape-shifting clouds without ever colliding.
+fact | Emperor penguins form massive huddles during freezing Antarctic blizzards, continuously rotating members from the icy outer edge to the warm center so every bird survives.
