@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-fact | Sea otters hold hands while they sleep in the water to prevent drifting apart from their families during the night.
 fact | The oldest living organism on Earth is a clonal colony of quaking aspen trees that has been sharing the same root system for 80,000 years.
 story | A stray kitten sits outside a quiet pottery studio every afternoon watching the artisan work, until one day the potter molds a tiny custom ceramic dish just for the kitten's daily milk.
 story | An elderly cobbler secretly mends the worn-out shoes of a hardworking student while she studies at the library, leaving them freshly polished outside her door without saying a word.
