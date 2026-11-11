@@ -25,3 +25,4 @@ Tech news: Fold Epic Paper Airplanes (source: https://www.foldableflight.com) | 
 Two-step login: the free setting that stops most account hacks | https://youtube.com/shorts/aMOc9m0f0k8 | 2026-11-10T02:31Z | short
 Tech news: AlphaProof Code (source: https://deepmind.google/blog/introducing-alphaproof-code/) | https://youtube.com/shorts/m397tWDLzsk | 2026-11-10T15:54Z | short
 How active noise-canceling headphones erase background sound by generating mirrored sound waves that physically cancel ambient noise in mid-air. | https://youtube.com/shorts/6pQ1Q2gl-ng | 2026-11-11T00:23Z | short
+Tech news: Google SWE points 48 AI agents at NASA Lidar, finds unmapped Maya pyramid in 72h (source: https://pietromiotti.com/latest/maya-site/?maya) | https://youtube.com/shorts/q9sAlbJqdGs | 2026-11-11T16:03Z | short
