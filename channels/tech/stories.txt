@@ -1,7 +1,6 @@
 # Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, news).
 # The top line is used next. When fewer than 5 are left the AI adds more, and one fresh tech news
 # story (Hacker News front page) is put on top at most once a day.
-explainer | How active noise-canceling headphones erase background sound by generating mirrored sound waves that physically cancel ambient noise in mid-air.
 explainer | How OLED smartphone displays create true pitch-black images by completely turning off individual microscopic light pixels instead of blocking a backlight.
 explainer | How capacitive touchscreens track your gestures by measuring subtle disruptions in an invisible electrical field across the outer glass.
 explainer | How wireless chargers transfer power across open space by using magnetic induction between dual copper coils inside the pad and your phone.
