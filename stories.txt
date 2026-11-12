@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | A stray kitten sits outside a quiet pottery studio every afternoon watching the artisan work, until one day the potter molds a tiny custom ceramic dish just for the kitten's daily milk.
 story | An elderly cobbler secretly mends the worn-out shoes of a hardworking student while she studies at the library, leaving them freshly polished outside her door without saying a word.
 story | A street sweeper painstakingly arranges fallen autumn leaves every morning to create a massive leaf-art portrait for an elderly neighbor watching from her window.
 story | A lonely train conductor shares his packed lunch with a stray dog at the end of the line every evening, until the day the dog arrives carrying the conductor's lost pocket key ring.
