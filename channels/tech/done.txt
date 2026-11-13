@@ -28,3 +28,4 @@ How active noise-canceling headphones erase background sound by generating mirro
 Tech news: Google SWE points 48 AI agents at NASA Lidar, finds unmapped Maya pyramid in 72h (source: https://pietromiotti.com/latest/maya-site/?maya) | https://youtube.com/shorts/q9sAlbJqdGs | 2026-11-11T16:03Z | short
 How OLED smartphone displays create true pitch-black images by completely turning off individual microscopic light pixels instead of blocking a backlight. | https://youtube.com/shorts/e4h_yXuMZ_M | 2026-11-12T01:47Z | short
 Tech news: NVIDIA Announces CEO Transition (source: https://nvidianews.nvidia.com/news/nvidia-announces-ceo-transition) | https://youtube.com/shorts/sUjcoR4XUPo | 2026-11-12T16:21Z | short
+How capacitive touchscreens track your gestures by measuring subtle disruptions in an invisible electrical field across the outer glass. | https://youtube.com/shorts/mnqz_uzHAkQ | 2026-11-13T00:55Z | short
