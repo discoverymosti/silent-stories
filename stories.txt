@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | A street sweeper painstakingly arranges fallen autumn leaves every morning to create a massive leaf-art portrait for an elderly neighbor watching from her window.
 story | A lonely train conductor shares his packed lunch with a stray dog at the end of the line every evening, until the day the dog arrives carrying the conductor's lost pocket key ring.
 story | A bus driver notices a shy boy drawing flowers on foggy bus windows every morning, so he leaves a brand-new sketchpad and pencils on the boy's usual seat on the last day of school.
 explainer | How stained glass windows are created: from cutting raw sheets of colored glass to wrapping lead cames and soldering them into luminous art.
