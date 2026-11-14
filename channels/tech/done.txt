@@ -32,3 +32,4 @@ How capacitive touchscreens track your gestures by measuring subtle disruptions 
 Tech news: Doomsday: Friday, 13 November, A.D. 2026 (1960) (source: https://www.science.org/doi/10.1126/science.132.3436.1291) | https://youtube.com/shorts/qiOYc7CEaZA | 2026-11-13T15:48Z | short
 How wireless chargers transfer power across open space by using magnetic induction between dual copper coils inside the pad and your phone. | https://youtube.com/shorts/7FSXwHaDOnw | 2026-11-14T00:39Z | short
 Tech news: Why get an expensive Pi when I have an old phone? (source: https://so.long.thanks.fish/why-pi-when-i-have-an-old-phone/) | https://youtube.com/shorts/UCRW90kOKXA | 2026-11-14T14:42Z | short
+How electronic paper screens display glare-free text in direct sunlight by using tiny electrical charges to physically shift microcapsules of black and white pigment. | https://youtube.com/shorts/xWaZ_Tt9qOM | 2026-11-14T23:28Z | short
