@@ -1,7 +1,6 @@
 # Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, news).
 # The top line is used next. When fewer than 5 are left the AI adds more, and one fresh tech news
 # story (Hacker News front page) is put on top at most once a day.
-explainer | How wireless chargers transfer power across open space by using magnetic induction between dual copper coils inside the pad and your phone.
 explainer | How electronic paper screens display glare-free text in direct sunlight by using tiny electrical charges to physically shift microcapsules of black and white pigment.
 tip | How downloading offline map regions on your smartphone gives you full GPS navigation in remote areas with zero cell coverage or roaming fees.
 tip | How switching your Wi-Fi router to an unused wireless channel instantly fixes home internet lag caused by your neighbors' overlapping signals.
