@@ -1,7 +1,6 @@
 # Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, news).
 # The top line is used next. When fewer than 5 are left the AI adds more, and one fresh tech news
 # story (Hacker News front page) is put on top at most once a day.
-tip | How downloading offline map regions on your smartphone gives you full GPS navigation in remote areas with zero cell coverage or roaming fees.
 tip | How switching your Wi-Fi router to an unused wireless channel instantly fixes home internet lag caused by your neighbors' overlapping signals.
 list | 4 universal keyboard shortcuts that immediately restore closed browser tabs, lock your desktop, and save minutes of daily computer navigation.
 list | 5 built-in phone settings—including disabling background app refresh and keyboard haptics—that extend daily battery life by up to 30 percent.
