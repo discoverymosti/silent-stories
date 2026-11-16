@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-explainer | How stained glass windows are created: from cutting raw sheets of colored glass to wrapping lead cames and soldering them into luminous art.
 explainer | How neon signs are handcrafted: bending hollow glass tubes over open gas flames, sealing electrodes, and charging them with glowing noble gas.
 explainer | How a mechanical wristwatch works: a coiled mainspring steadily releases energy through micro-gears and a tiny oscillating wheel to count time without electricity.
 fact | Thousands of starlings execute mesmerizing aerial murmurations by constantly reacting to just seven nearest neighbors, creating fluid shape-shifting clouds without ever colliding.
