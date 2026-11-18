@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-fact | Emperor penguins form massive huddles during freezing Antarctic blizzards, continuously rotating members from the icy outer edge to the warm center so every bird survives.
 story | An elderly train station cleaner leaves a small bowl of water for a stray puppy on the late-night platform, until one evening the grown dog gently tugs her apron to warn her of a forgotten bag on a bench.
 story | A deaf baker notices a young boy staring at her display window without enough coins, so she teaches him a simple sign language greeting and hands him a fresh warm loaf.
 story | A lonely toll booth operator feeds a stray crow a single peanut through her window every shift, until the bird drops a shiny brass key onto her tray.
