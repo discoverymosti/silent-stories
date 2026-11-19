@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | A lonely toll booth operator feeds a stray crow a single peanut through her window every shift, until the bird drops a shiny brass key onto her tray.
 story | An exterior painter working on an apartment building notices an elderly man watching him silently from a balcony, so he paints a vibrant sunburst around the man's window frame to brighten his view.
 story | A young subway busker plays her violin to an empty station every night, until a friendly stray cat sits right in front of her open case, attracting a warm crowd of smiling commuters.
 explainer | How silk is woven: boiling raw mulberry silkworm cocoons, unwinding miles of ultra-fine golden threads, and spinning them onto traditional wooden looms.
