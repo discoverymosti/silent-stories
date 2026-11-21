@@ -1,7 +1,6 @@
 # Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, news).
 # The top line is used next. When fewer than 5 are left the AI adds more, and one fresh tech news
 # story (Hacker News front page) is put on top at most once a day.
-explainer | Fiber optic cables transmit massive internet data across oceans at near light speed by trapping light beams inside microscopic flexible glass threads through total internal reflection.
 explainer | Smartphone vapor chamber heat pipes prevent processor throttling by evaporating liquid inside a sealed copper vacuum and recirculating the condensed fluid along internal wicks.
 explainer | Robot vacuum cleaners map floor plans in total darkness by firing thousands of invisible LiDAR laser pulses per second to measure the exact distance to wall reflections.
 explainer | Micro-electromechanical accelerometers detect smartphone orientation and motion by measuring microscopic silicon comb springs flexing against fixed electrical gates.
