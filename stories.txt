@@ -2,7 +2,16 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-explainer | How a piano key produces sound: pressing a key triggers a wooden lever mechanism that hurls a felt hammer against a steel string before a felt damper silences the vibration.
 explainer | How ice sculptures are crafted: carving massive blocks of crystal-clear ice with specialized chisels, then carefully smoothing the detailed surface using an open flame torch.
 fact | Flamingos are naturally born with gray feathers and only turn bright pink over time due to high levels of natural carotenoid pigments in the microscopic algae they eat.
 fact | Wombats are the only known animals that produce cube-shaped droppings, an adaptation that prevents their scent markers from rolling away on steep rocks and logs.
+story | A stray dog sleeps near a blacksmith's workshop every winter night to catch warmth from glowing sparks, prompting the craftsman to build a tiny wooden shelter right beside his forge.
+story | A street dog quietly guards an exhausted fruit vendor's pushcart while he sleeps on a crate, earning a fresh apple slice and a permanent bed beside the stall.
+story | A night-shift street sweeper finds a muddy teddy bear in the gutter, carefully washes it at a fountain, and leaves it under a lamppost where a searching mother discovers it at dawn.
+story | A stray kitten curls up inside a blind street violinist's open case every night, drawing mesmerized crowds who fill the case with coins to avoid waking the sleeping cat.
+story | A movie projectionist at an open-air cinema notices a stray puppy watching the light from a dark alley, so he angles a small mirror to project a miniature film screen down to the puppy's corner.
+explainer | How Raku pottery is crafted: red-hot ceramic vessels are pulled straight from a roaring furnace and buried in sawdust, creating brilliant metallic glazes through rapid oxygen reduction.
+explainer | How an acoustic guitar body is built: thin wooden boards are softened with steam, curved manually over hot metal bending irons, and glued together to form a resonant sound chamber.
+explainer | How natural pearls are formed: when a small irritant gets trapped inside an oyster shell, the mollusk secretes thousands of microscopic layers of iridescent nacre to coat the grain over several years.
+fact | Synchronous fireflies in select dark forests naturally coordinate their bioluminescent blinks, lighting up entire tree canopies in perfectly timed pulses.
+fact | Archerfish hunt insects resting on overhanging branches by shooting high-pressure jets of water out of their mouths with pinpoint accuracy to knock prey into the river.
