@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-explainer | How silk is woven: boiling raw mulberry silkworm cocoons, unwinding miles of ultra-fine golden threads, and spinning them onto traditional wooden looms.
 explainer | How a piano key produces sound: pressing a key triggers a wooden lever mechanism that hurls a felt hammer against a steel string before a felt damper silences the vibration.
 explainer | How ice sculptures are crafted: carving massive blocks of crystal-clear ice with specialized chisels, then carefully smoothing the detailed surface using an open flame torch.
 fact | Flamingos are naturally born with gray feathers and only turn bright pink over time due to high levels of natural carotenoid pigments in the microscopic algae they eat.
