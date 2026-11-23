@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-explainer | How ice sculptures are crafted: carving massive blocks of crystal-clear ice with specialized chisels, then carefully smoothing the detailed surface using an open flame torch.
 fact | Flamingos are naturally born with gray feathers and only turn bright pink over time due to high levels of natural carotenoid pigments in the microscopic algae they eat.
 fact | Wombats are the only known animals that produce cube-shaped droppings, an adaptation that prevents their scent markers from rolling away on steep rocks and logs.
 story | A stray dog sleeps near a blacksmith's workshop every winter night to catch warmth from glowing sparks, prompting the craftsman to build a tiny wooden shelter right beside his forge.
