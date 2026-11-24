@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-fact | Wombats are the only known animals that produce cube-shaped droppings, an adaptation that prevents their scent markers from rolling away on steep rocks and logs.
 story | A stray dog sleeps near a blacksmith's workshop every winter night to catch warmth from glowing sparks, prompting the craftsman to build a tiny wooden shelter right beside his forge.
 story | A street dog quietly guards an exhausted fruit vendor's pushcart while he sleeps on a crate, earning a fresh apple slice and a permanent bed beside the stall.
 story | A night-shift street sweeper finds a muddy teddy bear in the gutter, carefully washes it at a fountain, and leaves it under a lamppost where a searching mother discovers it at dawn.
