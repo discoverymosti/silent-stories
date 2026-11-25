@@ -1,6 +1,6 @@
 # Silent Stories 🎬
 
-Automated YouTube Shorts channel. **No voice, no language barrier**: stories told as **cartoon animation** (no real or photorealistic people), short captions and music, so they work worldwide.
+Automated YouTube Shorts channel: stories told as **cartoon animation** (no real or photorealistic people), **narrated in the owner's own voice**, with short captions and music.
 
 ```
 stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI cartoon images per scene (Gemini → Cloudflare FLUX → Pollinations,
@@ -94,6 +94,14 @@ What the cartoon mode changes:
 - **Edit:** clean saturated colours (no film grain or vignette), stronger camera moves with a gentle float so stills feel alive, slide and circle transitions on Shorts, captions that pop in with a bounce.
 - **No real people as a fallback either:** if AI images fail, only Pixabay *animation* clips are used (Pexels is skipped, it has no animation filter).
 - The TECH channel follows the same variable; set `TECH_VISUAL_STYLE` to give it a different look.
+
+## Narration in your own voice
+YouTube's *reused content* review looks for original commentary, so videos are no longer silent: each one has a narration written as storytelling (not a description of the pictures) and spoken in **your voice**.
+- **One clip, every video:** upload 15-30 seconds of your voice once as `voice/sample.mp3` (see `voice/README.md`). AI then speaks every narration in that voice, each picture changes exactly when its sentence starts, and the music drops under the voice. Hear it first with the **Test my cloned voice** workflow.
+- **No sample, no upload:** until the sample is there, or if the voice can't be made in a run, nothing is published (the story stays queued). `NARRATION=off` brings back the silent videos.
+- **Or really record it:** `NARRATION=record` writes a script per upcoming video into `voice/<story>/script.md`; you upload your reading into that folder and the video is timed to it. A real recording is the strongest proof of original work for YouTube's reviewers.
+- The weekly film's teaser Short is skipped while narration is on (it reused the film's pictures without a voice).
+- A narrated channel does not get approved automatically: fewer, better videos and removing the most template-like old uploads matter too.
 
 ## Growth features
 - **8 languages:** each upload carries its title and description in Spanish, Portuguese, Hindi, Indonesian, Arabic, French, German and Japanese (YouTube localizations). Viewers see them in their own language; the videos have no speech, so this removes the last language barrier. Change the list with the `YT_LANGUAGES` variable (e.g. `es,pt,hi`), empty = English only.

@@ -2,7 +2,8 @@
 Silent Stories -> YouTube pipeline (fully automatic, copyright-safe):
 daily vertical Shorts, plus a weekly widescreen short film with VIDEO_FORMAT=film.
 
-No voiceover. Original AI cartoon / animation visuals (VISUAL_STYLE, no real or photorealistic
+Narrated in the channel owner's own voice (NARRATION: cloned from voice/sample.*, or recorded per
+video; "off" = the old silent videos). Original AI cartoon / animation visuals (VISUAL_STYLE, no real or photorealistic
 people) + animated captions + original music, so it works in every language and contains no
 third-party copyrighted material.
 
@@ -89,6 +90,26 @@ CLAUDE_PRICES = {"claude-fable-5-1": (10.0, 50.0), "claude-opus-5-5": (4.0, 20.0
 CLAUDE_FALLBACK_OK = {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"}
 GEMINI_IMAGE_USD = float(os.getenv("GEMINI_IMAGE_USD") or 0.07)  # cautious estimate per Gemini image
 
+# Narration in the channel owner's own voice (YouTube's reused-content policy: original commentary).
+#   clone    - (default) fully automatic: every video's narration is spoken by AI in YOUR voice, cloned
+#              from one clip you provide once as voice/sample.<mp3|m4a|wav...> (scripts/clone_voice.py).
+#              No sample, or the voice can't be made: no video is published (never a silent one).
+#   record   - the pipeline writes a narration script for the next videos into voice/<story>/script.md,
+#              you record each one and upload the audio file into the same folder; a video is published
+#              only once its recording is there.
+#   optional - like record, but without a recording the video goes out silent.
+#   off      - the old silent videos.
+NARRATION = (os.getenv("NARRATION") or "clone").strip().lower()
+if NARRATION not in ("clone", "record", "optional"):
+    NARRATION = "off"
+VOICED = NARRATION != "off" and not TEASER
+RECORDED = VOICED and NARRATION != "clone"
+NARRATION_LANGUAGE = (os.getenv("NARRATION_LANGUAGE") or "English").strip()
+VOICE_DIR = CH_DIR / "voice"
+VOICE_AHEAD = max(1, int(os.getenv("VOICE_AHEAD") or 3))  # scripts kept ready, so several can be recorded in one go
+VOICE_LEAD = 0.3  # seconds of picture before the first word
+WORDS_PER_SECOND = 2.4  # calm storytelling pace
+
 NO_TEXT = ("No text, no letters, no captions, no logos, no watermark, no brand names, "
            "no real celebrities, no copyrighted characters.")
 
@@ -127,6 +148,20 @@ def next_story() -> tuple[str, str] | None:
             genre, idea = "story", genre
         return genre.strip().lower(), idea.strip()
     return None
+
+
+def queue() -> list[tuple[str, str]]:
+    """Every (genre, idea) waiting in the queue, top first."""
+    out = []
+    for line in STORIES.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        genre, _, idea = line.partition("|")
+        if not idea:
+            genre, idea = "story", genre
+        out.append((genre.strip().lower(), idea.strip()))
+    return out
 
 
 def mark_done(idea: str, video_id: str | None) -> None:
@@ -565,6 +600,21 @@ SCREENPLAY_RULES_TECH = """SCREENPLAY RULES (write the screenplay first, then sh
 - A caption needs time to be read: about 1.5 seconds plus half a second per word.
 """
 
+NARRATION_RULES = """NARRATION RULES (the channel's owner reads the narration aloud in their own voice; it is the heart of the video)
+- Every scene has a "narration": what the narrator SAYS while that picture is on screen, written in
+  {lang}, 1-2 short spoken sentences ({per_scene} words). All scenes together: {total} words.
+- It is one continuous piece of storytelling by a warm, personal narrator: it flows from scene to
+  scene, and read aloud on its own it is a complete, satisfying {piece}.
+- It adds what pictures cannot: what the character thinks or fears, why something matters, the
+  narrator's own reflection or a little humour. Never a description of the picture ("we see a dog").
+- Scene 1's narration is the hook: a line that makes a listener stop scrolling. The last scene's
+  narration lands the meaning and is the line people remember.
+- Spoken language: short words, natural rhythm, contractions, no lists, no brackets, no stage
+  directions, no hashtags. Numbers written as words.
+- "seconds" of each scene = its narration's word count / {wps} + 0.5.
+- The on-screen captions stay as short as before; they highlight, they do not repeat the narration.
+"""
+
 # what the code checks after the AI answers (same numbers as the rules in the prompts)
 SCENES_OK, TOTAL_OK, CAPTION_WORDS = ((16, 26), (150.0, 190.0), 8) if FILM else ((8, 12), (45.0, 55.0), 7)
 
@@ -886,7 +936,8 @@ def fix_screenplay(sb: dict, idea: str) -> None:
         print("  screenplay check: OK")
         return
     print(f"  screenplay check: {'; '.join(x[:160] for x in problems)}")
-    keys = ("shot", "image_prompt", "cast", "location", "lighting", "camera", "query", "caption", "seconds")
+    keys = ("shot", "image_prompt", "cast", "location", "lighting", "camera", "query", "caption", "seconds") \
+        + (("narration",) if VOICED else ())
     try:
         fix = json.loads(_strip_fences(ask_ai(SCREENPLAY_FIX_PROMPT.format(
             channel=CHANNEL_NAME, idea=idea, problems="\n".join(f"- {x}" for x in problems),
@@ -895,10 +946,14 @@ def fix_screenplay(sb: dict, idea: str) -> None:
             locations=json.dumps([l.get("id") for l in sb.get("locations") or [] if isinstance(l, dict)]),
             min_scenes=SCENES_OK[0] + 1, max_scenes=SCENES_OK[1] - 1, min_total=TOTAL_OK[0], max_total=TOTAL_OK[1],
             words=CAPTION_WORDS,
-            scenes=json.dumps([{k: s.get(k) for k in keys} for s in sb["scenes"]], ensure_ascii=False, indent=1)))))
+            scenes=json.dumps([{k: s.get(k) for k in keys} for s in sb["scenes"]], ensure_ascii=False, indent=1))
+            + ('\nEvery scene also keeps a "narration" (what the narrator says, 1-2 spoken sentences in '
+               f'{NARRATION_LANGUAGE}); together the narrations stay one flowing piece.' if VOICED else ""))))
         new = dict(sb, scenes=fix["scenes"])
         if storyboard_problem(new):
             raise ValueError(storyboard_problem(new))
+        if VOICED and any(not str(x.get("narration") or "").strip() for x in new["scenes"]):
+            raise ValueError("the rewrite lost the narration")
     except (SystemExit, Exception) as e:  # noqa: BLE001 - the first draft is still a usable video
         print(f"  could not rewrite the screenplay ({str(e)[:100]}); keeping the first draft")
         return
@@ -1007,6 +1062,23 @@ TECH_WORDING = [
 ]
 
 
+def narrated(prompt: str) -> str:
+    """The prompts were written for silent videos: wording for videos the owner narrates."""
+    for old, new in [
+        ("Videos have NO voiceover and NO dialogue: they tell a story only through",
+         "Videos are NARRATED by the channel's owner in their own voice, over"),
+        ("Videos have NO voiceover and NO dialogue: they explain technology only through",
+         "Videos are NARRATED by the channel's owner in their own voice, over"),
+        ("very short on-screen captions and music, so anyone in any country can follow.",
+         "very short on-screen captions and music. The pictures and captions alone must still be easy to follow."),
+        ("subscribe for more silent stories", "subscribe for more narrated stories"),
+        ("for tech explained without words", "for tech explained simply"),
+        ("explains technology to everyone, without words", "explains technology to everyone, narrated by its owner"),
+    ]:
+        prompt = prompt.replace(old, new)
+    return prompt
+
+
 def storyboard(genre: str, idea: str) -> dict:
     prompt = STORYBOARD_PROMPT.format(
         genre=genre, idea=idea, channel=CHANNEL_NAME,
@@ -1030,6 +1102,13 @@ def storyboard(genre: str, idea: str) -> dict:
             if old not in prompt:
                 print(f"  note: tech wording not applied ({old[:40]!r} missing from the prompt)")
             prompt = prompt.replace(old, new)
+    if VOICED:
+        lo, hi = TOTAL_OK
+        prompt = narrated(prompt).replace("VISUAL RULES", NARRATION_RULES.format(
+            lang=NARRATION_LANGUAGE, per_scene="12-30" if FILM else "8-18", wps=WORDS_PER_SECOND,
+            total=f"{int(lo * WORDS_PER_SECOND * 0.9)}-{int(hi * WORDS_PER_SECOND * 0.95)}",
+            piece="explanation" if TECH else "story") + "\nVISUAL RULES", 1).replace(
+            '"query": str, "caption": str, "seconds": number}]}', '"query": str, "caption": str, "narration": str, "seconds": number}]}')
     for attempt in range(2):  # an incomplete storyboard gets one fresh try
         try:
             sb = json.loads(_strip_fences(ask_ai(prompt)))
@@ -1045,8 +1124,9 @@ def storyboard(genre: str, idea: str) -> dict:
     sb["description"] = str(sb.get("description") or idea).strip()
     if (src := re.search(r"\(source: (\S+)\)", idea)) and src.group(1) not in sb["description"]:
         sb["description"] += f"\nSource: {src.group(1)}"
-    sb["ending"] = str(sb.get("ending") or ("Tech, explained without words." if TECH
-                                            else "Some stories need no words.")).strip()
+    sb["ending"] = str(sb.get("ending") or (
+        ("Tech, explained simply." if TECH else "Every story has a heart.") if VOICED else
+        ("Tech, explained without words." if TECH else "Some stories need no words."))).strip()
     if sb.get("music_mood") not in CHORDS:
         sb["music_mood"] = "warm"
     if TECH and sb["music_mood"] in ("sad", "warm"):  # explainer music, not drama music
@@ -1063,11 +1143,14 @@ def storyboard(genre: str, idea: str) -> dict:
         if s.get("camera") not in CAMERA_MOVES:
             s["camera"] = "zoom_in"
         s["caption"] = _caption(s)
+        s["narration"] = " ".join(str(s.get("narration") or "").split()) if VOICED else ""
         s["image_prompt"] = str(s["image_prompt"])
         s.setdefault("query", s["image_prompt"][:40])
         if isinstance(s.get("cast"), str):
             s["cast"] = [s["cast"]]
     time_screenplay(sb["scenes"])
+    if VOICED and sum(1 for s in sb["scenes"] if s["narration"]) < len(sb["scenes"]) * 0.7:
+        raise SystemExit("Storyboard has no usable narration (the AI left most scenes without a line).")
     sb.setdefault("style", "cinematic film still, soft natural light, 35mm, shallow depth of field")
     if ANIMATED:
         sb["style"] = STYLE  # one channel look, whatever the storyboard answered
@@ -1608,7 +1691,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         lines.append(f"Dialogue: 0,{ass_time(0.4)},{ass_time(title_len - 0.2)},Title,,0,0,0,,"
                      f"{{\\fad(700,500)}}{ass_escape(title)}")
         lines.append(f"Dialogue: 0,{ass_time(1.1)},{ass_time(title_len - 0.2)},Tag,,0,0,0,,"
-                     f"{{\\fad(700,500)}}{ass_escape(('a ' + CHANNEL_NAME + ' silent film').upper())}")
+                     f"{{\\fad(700,500)}}{ass_escape(('a ' + CHANNEL_NAME + (' film' if VOICED else ' silent film')).upper())}")
     for s, t in zip(scenes, starts):
         cap = ass_escape(s.get("caption", "").strip())
         if cap:
@@ -1736,6 +1819,173 @@ def make_music(mood: str, seconds: float, dest: Path) -> str:
     return "original synthesized score"
 
 
+# ================================================================ narration (the owner's recorded voice)
+
+VOICE_EXT = AUDIO_EXT | {".webm", ".3gp", ".amr", ".mp4", ".mov", ".caf", ".wma", ".aiff"}  # phone recorders
+
+
+def slug_for(fmt: str, idea: str) -> str:
+    """Folder name of a story's script: readable start + a short fingerprint of the idea."""
+    import hashlib
+    words = re.sub(r"[^a-z0-9]+", "-", idea.lower()).strip("-")[:36].strip("-")
+    return f"{fmt}-{words}-{hashlib.sha1(idea.encode('utf-8')).hexdigest()[:6]}"
+
+
+def voice_recording(folder: Path) -> Path | None:
+    files = sorted(f for f in folder.glob("*") if f.is_file() and f.suffix.lower() in VOICE_EXT)
+    return files[0] if files else None
+
+
+def script_words(sb: dict) -> int:
+    return sum(len(s.get("narration", "").split()) for s in sb["scenes"])
+
+
+def write_script(folder: Path, sb: dict, genre: str, idea: str) -> None:
+    """The narration to record, as a page that reads well on github.com, plus the saved storyboard
+    (the video is later built from exactly this storyboard, so the pictures match what was read)."""
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "storyboard.json").write_text(json.dumps(
+        {"format": FORMAT, "genre": genre, "idea": idea, "storyboard": sb}, indent=1, ensure_ascii=False),
+        encoding="utf-8")
+    secs = script_words(sb) / WORDS_PER_SECOND
+    lines = [f"{i}. {s['narration']}" for i, s in enumerate((x for x in sb["scenes"] if x["narration"]), 1)]
+    (folder / "script.md").write_text(f"""# {sb['title']}
+
+**Record this in your own voice** ({'weekly film' if FILM else 'Short'}, about {secs:.0f} seconds at a calm pace).
+
+How to record
+- One recording, read from line 1 to the last line, in this order. Any phone voice recorder works.
+- Tell it like a story to a friend. Take a short breath between lines; that pause is where the picture changes.
+- You may change words to sound like yourself. Keep the order of the lines and roughly their length.
+- A quiet room, the phone a hand's width from your mouth. No music: the pipeline adds it.
+
+Then upload the audio file **into this folder** (on github.com: open this folder → *Add file* → *Upload files*).
+The next publishing run builds the video around your voice and uploads it.
+
+## Script
+
+{chr(10).join(lines)}
+
+---
+Story idea: {idea}
+""", encoding="utf-8")
+
+
+def detect_pauses(voice: Path) -> list[float]:
+    """Middle of every pause (0.22 s or longer) in the cleaned voice track."""
+    err = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(voice), "-af", "silencedetect=noise=-32dB:d=0.22",
+                          "-f", "null", "-"], capture_output=True, text=True).stderr
+    starts = [float(x) for x in re.findall(r"silence_start: (-?[\d.]+)", err)]
+    ends = [float(x) for x in re.findall(r"silence_end: (-?[\d.]+)", err)]
+    return [(a + b) / 2 for a, b in zip(starts, ends)]
+
+
+def prepare_voice(recording: Path, sb: dict, work: Path) -> Path:
+    """Clean the recording (silence at both ends cut, rumble and hiss reduced, one loudness) and time
+    every scene to it: each scene lasts as long as its lines take to say, with the cut moved onto the
+    nearest pause in the voice. Raises ValueError when the file can't be this script's recording."""
+    work.mkdir(parents=True, exist_ok=True)
+    voice = work / "voice.wav"
+    trim = "silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.05"
+    ff("-i", str(recording), "-map", "0:a:0", "-vn", "-af",
+       f"highpass=f=80,afftdn=nf=-28,{trim},areverse,{trim},areverse,loudnorm=I=-16:TP=-1.5:LRA=11",
+       "-ar", "44100", "-ac", "2", str(voice))
+    length, expected = audio_seconds(voice), script_words(sb) / WORDS_PER_SECOND
+    if not expected * 0.4 <= length <= expected * 2.6:
+        raise ValueError(f"it is {length:.0f} s long, but this script takes about {expected:.0f} s to read: "
+                         "is it the right recording, complete, and without long silences?")
+    scenes = sb["scenes"]
+    # share of the recording per scene: its letters, plus a breath; a scene without a line gets a short beat
+    weight = [len(s["narration"]) + 8 if s["narration"] else 22 for s in scenes]
+    cuts, t = [], 0.0
+    for w in weight[:-1]:
+        t += length * w / sum(weight)
+        cuts.append(t)
+    pauses, moved = detect_pauses(voice), 0
+    for i, c in enumerate(cuts):  # put each cut on a real pause when one is close
+        lo = (cuts[i - 1] if i else 0.0) + 1.2
+        hi = (cuts[i + 1] if i + 1 < len(cuts) else length) - 1.2
+        near = [x for x in pauses if abs(x - c) <= 1.1 and lo <= x <= hi]
+        if near:
+            cuts[i] = min(near, key=lambda x: abs(x - c))
+            moved += 1
+    edges = [0.0] + cuts + [length]
+    for i, s in enumerate(scenes):
+        s["seconds"] = round(max(1.5, edges[i + 1] - edges[i]) + (VOICE_LEAD if i == 0 else 0.0), 2)
+    print(f"  voice: {recording.name}, {length:.1f} s (script about {expected:.0f} s); "
+          f"{moved} of {len(cuts)} picture changes sit on a pause in your voice")
+    return voice
+
+
+def voice_sample() -> Path | None:
+    """The clip of the owner's voice that every narration is cloned from: voice/sample.* of this
+    channel, else the main channel's."""
+    for folder in dict.fromkeys([VOICE_DIR, ROOT / "voice"]):
+        files = sorted(f for f in folder.glob("sample.*") if f.is_file() and f.suffix.lower() in VOICE_EXT)
+        if files:
+            return files[0]
+    return None
+
+
+def speak_lines(lines: list[str], sample: Path, out: Path) -> None:
+    """Every line spoken in the sample's voice: out/line_NN.wav (scripts/clone_voice.py)."""
+    (out / "lines.json").write_text(json.dumps(lines, ensure_ascii=False), encoding="utf-8")
+    subprocess.run([sys.executable, str(Path(__file__).with_name("clone_voice.py")), str(sample),
+                    str(out / "lines.json"), str(out), NARRATION_LANGUAGE], check=True, timeout=5400)
+
+
+def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
+    """The narration spoken in the owner's cloned voice, one take per scene, and every scene timed to
+    its own line: the picture changes exactly when the next sentence starts. Raises ValueError /
+    CalledProcessError when the voice can't be made."""
+    out = work / "voice"
+    out.mkdir(parents=True, exist_ok=True)
+    clean = out / "sample.wav"  # mono, at most 30 s, rumble and hiss reduced: what the model listens to
+    ff("-i", str(sample), "-map", "0:a:0", "-vn", "-af",
+       "highpass=f=80,afftdn=nf=-28,silenceremove=start_periods=1:start_threshold=-42dB,loudnorm=I=-18:TP=-2",
+       "-t", "30", "-ar", "44100", "-ac", "1", str(clean))
+    if audio_seconds(clean) < 6:
+        raise ValueError(f"the voice sample {sample.name} has under 6 seconds of speech; 15-30 seconds work best")
+    scenes = sb["scenes"]
+    speak_lines([s["narration"] for s in scenes], clean, out)
+    trim = "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.03"
+    pre, post, pieces = 0.15, 0.35, []
+    for i, s in enumerate(scenes):
+        piece, spoken = out / f"scene_{i:02d}.wav", 0.0
+        if s["narration"]:
+            take = out / f"take_{i:02d}.wav"
+            ff("-i", str(out / f"line_{i:02d}.wav"), "-af", f"{trim},areverse,{trim},areverse",
+               "-ar", "44100", "-ac", "1", str(take))
+            spoken = audio_seconds(take)
+            if spoken < 0.4:
+                raise ValueError(f"line {i + 1} came out empty")
+            s["seconds"] = round(max(2.0, pre + spoken + post), 2)
+            ff("-i", str(take), "-af", f"adelay={int(pre * 1000)},apad=whole_dur={s['seconds']:.2f}",
+               "-t", f"{s['seconds']:.2f}", str(piece))
+        else:  # a scene without a line: a short beat of music only
+            s["seconds"] = round(min(s["seconds"], 3.0), 2)
+            ff("-f", "lavfi", "-t", f"{s['seconds']:.2f}", "-i", "anullsrc=r=44100:cl=mono", str(piece))
+        pieces.append(piece)
+    scenes[0]["seconds"] = round(scenes[0]["seconds"] + VOICE_LEAD, 2)  # the voice track starts VOICE_LEAD in
+    voice = work / "voice.wav"
+    ff(*sum((["-i", str(x)] for x in pieces), []), "-filter_complex",
+       "".join(f"[{i}:a]" for i in range(len(pieces))) + f"concat=n={len(pieces)}:v=0:a=1,"
+       "loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "44100", "-ac", "2", str(voice))
+    print(f"  voice: {sum(1 for s in scenes if s['narration'])} lines in your cloned voice, "
+          f"{audio_seconds(voice):.1f} s (sample: {sample.name})")
+    return voice
+
+
+def mix_voice(voice: Path, music: Path, lead: float, total: float, dest: Path) -> None:
+    """Voice over the music: the music drops while you speak and comes back up in the gaps and at the end."""
+    ms = int(lead * 1000)
+    graph = (f"[0:a]adelay={ms}|{ms},apad=whole_dur={total:.2f},asplit[v][key];"
+             f"[1:a]volume=0.5[m];[m][key]sidechaincompress=threshold=0.05:ratio=4:attack=40:release=700[duck];"
+             f"[duck][v]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[a]")
+    ff("-i", str(voice), "-i", str(music), "-filter_complex", graph, "-map", "[a]", "-t", f"{total:.2f}",
+       "-c:a", "aac", "-b:a", "192k", str(dest))
+
+
 def watermark_filter() -> str:
     """Semi-transparent channel name. Shorts: top-left, clear of the Shorts UI; films: bottom-right."""
     if not WATERMARK:
@@ -1780,7 +2030,7 @@ def make_thumbnail(sb: dict, src: Path | None, dest: Path) -> None:
 # ================================================================ build
 
 def finish_video(sb: dict, parts: list[Path], lengths: list[float], work: Path, report: dict,
-                 intro_len: float = 0.0) -> tuple[Path, float]:
+                 intro_len: float = 0.0, voice: Path | None = None) -> tuple[Path, float]:
     """Crossfade the scene clips, then add captions, original music and the watermark."""
     joined = work / "joined.mp4"
     starts = crossfade_all(parts, lengths, joined, fade_ends=FILM)
@@ -1792,6 +2042,10 @@ def finish_video(sb: dict, parts: list[Path], lengths: list[float], work: Path, 
                    title=sb["title"] if FILM else "", title_len=intro_len)
     music = work / "music.m4a"
     report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
+    if voice:  # the first scene starts where the film's title card ends
+        mixed = work / "audio.m4a"
+        mix_voice(voice, music, scene_starts[0] + VOICE_LEAD, total, mixed)
+        music, report["voice"] = mixed, sb.get("voice", "owner's own narration")
 
     final = work / "short.mp4"
     ff("-i", str(joined), "-i", str(music), "-map", "0:v:0", "-map", "1:a:0",
@@ -1814,8 +2068,12 @@ def portrait_scene(img: Path, seconds: float, dest: Path) -> None:
        "-filter_complex", graph, "-frames:v", str(n), *ENC, str(dest))
 
 
-def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
+def build_video(sb: dict, work: Path, recording: Path | None = None,
+                sample: Path | None = None) -> tuple[Path, dict]:
+    """recording: the owner's own reading of this storyboard's narration; sample: the clip their
+    voice is cloned from (the narration is then spoken by AI in that voice)."""
     work.mkdir(parents=True, exist_ok=True)
+    voice = prepare_voice(recording, sb, work) if recording else cloned_voice(sb, sample, work) if sample else None
     used: set[int] = set()
     parts, lengths, report = [], [], {"ai": 0, "stock": 0, "reused": 0, "fallback": 0}
     base_seed = random.randint(1, 10_000_000)
@@ -1875,7 +2133,7 @@ def build_video(sb: dict, work: Path) -> tuple[Path, dict]:
         parts.append(end)
         lengths.append(4.0 + XF)
 
-    final, total = finish_video(sb, parts, lengths, work, report, intro_len)
+    final, total = finish_video(sb, parts, lengths, work, report, intro_len, voice)
     if not (sources.get("thumb") and thumb_img.exists()):
         thumb_img = imgs[0]
     try:
@@ -1897,7 +2155,7 @@ def build_metadata(sb: dict, report: dict, genre: str = "story") -> dict:
     hashtags = [("#" + re.sub(r"[^\w]", "", h.lstrip("#"))) for h in sb.get("hashtags", []) if h.strip()]
     hashtags = list(dict.fromkeys(hashtags + [CHANNEL_TAG, "#ShortFilm" if FILM else "#Shorts"]))[:6]
     tags, total = [], 0
-    extra = ["tech explained", "technology", "tech shorts"] if TECH else ["silent stories", "no words story", "short film"]
+    extra = ["tech explained", "technology", "tech shorts"] if TECH else (["narrated story", "storytelling", "short film"] if VOICED else ["silent stories", "no words story", "short film"])
     if ANIMATED:
         extra += ["animation", "cartoon", "animated explainer" if TECH else "animated story"]
     for t in [clean_tag(x) for x in sb.get("tags", [])] + [CHANNEL_NAME] + extra:
@@ -2097,6 +2355,9 @@ Return ONLY JSON: {{"title": str, "description": str, "hashtags": [str], "tags":
 def teaser_main() -> int:
     """After the weekly film upload (same workflow job): a vertical teaser Short made from the
     film's pictures, linking to the film. Reuses the film's out/ folder; writes to out/teaser/."""
+    if NARRATION != "off":
+        print("Narration is on - no silent teaser (it would reuse the film's pictures without your voice).")
+        return 0
     film_meta, film_sb, film_work = OUT / "metadata.json", OUT / "storyboard.json", OUT / "work"
     if not (film_meta.exists() and film_sb.exists()):
         print("No film from this run - no teaser.")
@@ -2173,6 +2434,58 @@ def teaser_main() -> int:
     return 0
 
 
+def voice_folders() -> list[tuple[Path, dict]]:
+    """Script folders of this format whose story is still in the queue, in queue order. Folders of
+    stories that left the queue are removed (git history still has them)."""
+    order = {idea: n for n, (_, idea) in reversed(list(enumerate(queue())))}
+    found = []
+    for folder in sorted(VOICE_DIR.glob(f"{FORMAT}-*")) if VOICE_DIR.is_dir() else []:
+        try:
+            data = json.loads((folder / "storyboard.json").read_text(encoding="utf-8"))
+            data["storyboard"]["scenes"][0]["narration"], data["genre"]
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            if folder.is_dir() and not voice_recording(folder):
+                shutil.rmtree(folder, ignore_errors=True)  # a broken or half-written script: write it again
+            continue
+        if data.get("idea") in order:
+            found.append((order[data["idea"]], folder, data))
+        elif voice_recording(folder):  # never throw a recording away: the idea's line may only have been edited
+            print(f"  {folder.name}: its story is no longer in {STORIES.name} (line edited or removed?); "
+                  "the folder holds a recording, so it is kept. Delete it if it is not needed.")
+        else:
+            print(f"  {folder.name}: its story is no longer in {STORIES.name}; folder removed")
+            shutil.rmtree(folder, ignore_errors=True)
+    return [(f, d) for _, f, d in sorted(found, key=lambda x: x[0])]
+
+
+def voice_job() -> tuple[Path, dict, Path] | None:
+    """The first story in the queue whose recording has been uploaded."""
+    for folder, data in voice_folders():
+        rec = voice_recording(folder)
+        if rec:
+            return folder, data, rec
+    return None
+
+
+def prepare_scripts() -> None:
+    """Keep narration scripts ready for the next VOICE_AHEAD stories of the queue (best effort)."""
+    have = {d["idea"] for _, d in voice_folders()}
+    for genre, idea in queue()[:VOICE_AHEAD]:
+        if idea in have:
+            continue
+        folder = VOICE_DIR / slug_for(FORMAT, idea)
+        if folder.exists() and voice_recording(folder):
+            print(f"  {folder.name} holds a recording but no readable script; left as it is")
+            continue
+        print(f"Writing the narration script for: {idea[:90]}")
+        try:
+            write_script(folder, storyboard(genre, idea), genre, idea)
+            print(f"  script ready to record: {folder.relative_to(ROOT)}/script.md")
+        except (SystemExit, Exception) as e:  # noqa: BLE001 - the next run tries again
+            print(f"  no script this time ({str(e)[:150]})")
+            return
+
+
 def main() -> int:
     if TEASER:
         return teaser_main()
@@ -2186,19 +2499,67 @@ def main() -> int:
         youtube_connection_check()
     decide_tier()
     refill_queue()
-    item = next_story()
-    if not item:
-        print(f"{STORIES.name} is empty - add more ideas.")
+    sample = voice_sample() if NARRATION == "clone" else None
+    if NARRATION == "clone" and not sample:
+        note = ("No video made: narration is on, but there is no sample of your voice yet. Upload one clip "
+                "of 15-30 seconds of you speaking (quiet room, no music) as voice/sample.mp3 (or .m4a, .wav) "
+                "and every video will be narrated in your voice. NARRATION=off brings back silent videos.")
+        print(note)
+        if os.getenv("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+                f.write(f"\n**Waiting for your voice sample.** {note}\n")
         return 0
-    genre, idea = item
+    job = voice_job() if RECORDED else None
+    if RECORDED and not job:
+        prepare_scripts()
+        waiting = [f.name for f, _ in voice_folders()]
+        if NARRATION == "record" or not waiting:
+            note = (f"No video made: no recording yet. Scripts waiting for your voice in "
+                    f"{VOICE_DIR.relative_to(ROOT)}/: {', '.join(waiting) or 'none (no script could be written)'}. "
+                    "Open a folder's script.md, record it and upload the audio file into that folder.")
+            print(note)
+            if os.getenv("GITHUB_STEP_SUMMARY"):
+                with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+                    f.write(f"\n**Waiting for your voice.** {note}\n")
+            if not (SKIP_UPLOAD and waiting):
+                return 0
+        print("No recording - " + ("preview without narration" if SKIP_UPLOAD else "this video goes out silent")
+              + " (NARRATION=optional)." if NARRATION == "optional" else "Preview without your voice.")
+        folder, data = voice_folders()[0]
+        job = (folder, data, None)
+    if job:
+        folder, data, recording = job
+        genre, idea, sb = data["genre"], data["idea"], data["storyboard"]
+    else:
+        item = next_story()
+        if not item:
+            print(f"{STORIES.name} is empty - add more ideas.")
+            return 0
+        genre, idea = item
+        folder = recording = sb = None
     print(f"[{genre}] {idea}")
 
     OUT.mkdir(exist_ok=True)
-    sb = storyboard(genre, idea)
+    sb = sb or storyboard(genre, idea)
     (OUT / "storyboard.json").write_text(json.dumps(sb, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Title: {sb['title']}  ({len(sb['scenes'])} scenes, mood {sb.get('music_mood')})")
 
-    video, report = build_video(sb, OUT / "work")
+    if sample:
+        sb["voice"] = "owner's voice, AI-cloned from their own sample"
+    try:
+        video, report = build_video(sb, OUT / "work", recording, sample)
+    except (ValueError, subprocess.SubprocessError) as e:  # no voice: nothing is uploaded, the story stays queued
+        if not (recording or sample):
+            raise
+        note = (f"The recording {recording.name} in {folder.relative_to(ROOT)}/ can't be used: {e} "
+                "Replace the file and run again." if recording else
+                f"The narration could not be spoken in your voice ({str(e)[:300]}). Nothing was uploaded; "
+                "the story stays at the top of the queue and the next run tries again.")
+        print(note)
+        if os.getenv("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+                f.write(f"\n**Voice problem.** {note}\n")
+        return 1
     final, thumb = OUT / "short.mp4", OUT / "thumbnail.jpg"
     shutil.move(video, final)
     shutil.move(OUT / "work" / "thumbnail.jpg", thumb)
@@ -2225,6 +2586,9 @@ def main() -> int:
         return 0
     vid = upload(final, thumb, meta)
     mark_done(idea, vid)
+    if folder:  # script and recording are used up; get the next scripts ready to record
+        shutil.rmtree(folder, ignore_errors=True)
+        prepare_scripts()
     # crosspost.py (next workflow step) shares this upload on Instagram / Facebook / X
     meta.update(report=report, format=FORMAT, privacy=meta.get("privacy", PRIVACY),
                 youtube_url=f"https://youtu.be/{vid}" if FILM else f"https://youtube.com/shorts/{vid}")

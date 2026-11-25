@@ -1,0 +1,53 @@
+name: Test my cloned voice
+# Hear your cloned voice before any video uses it: speaks a few sentences in the voice of
+# voice/sample.* and keeps the result as a downloadable artifact. Uploads nothing to YouTube.
+run-name: "Test my cloned voice (no upload)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      text:
+        description: "What your cloned voice should say"
+        default: "Nobody ever asked why he couldn't sleep. Every night, he chose the same cold corner. And just like that, he had a home."
+      language:
+        description: "Language of the text"
+        default: English
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: voice-model-chatterbox-0.1.7
+      - name: Install
+        run: |
+          sudo apt-get -y -qq --no-install-recommends install ffmpeg
+          pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-voice.txt
+      - name: Speak
+        env:
+          TEXT: ${{ inputs.text }}
+          LANGUAGE: ${{ inputs.language }}
+        run: |
+          SAMPLE=$(ls voice/sample.* 2>/dev/null | head -1)
+          if [ -z "$SAMPLE" ]; then echo "::error::No voice sample yet: upload a 15-30 s clip of your voice as voice/sample.mp3"; exit 1; fi
+          mkdir -p out
+          ffmpeg -y -loglevel error -i "$SAMPLE" -map 0:a:0 -vn -af "highpass=f=80,afftdn=nf=-28,loudnorm=I=-18:TP=-2" -t 30 -ar 44100 -ac 1 out/sample.wav
+          python -c "import json, os; json.dump([os.environ['TEXT']], open('out/lines.json', 'w'))"
+          python scripts/clone_voice.py out/sample.wav out/lines.json out "$LANGUAGE"
+          mv out/line_00.wav out/my-cloned-voice.wav
+      - uses: actions/upload-artifact@v7
+        with:
+          name: my-cloned-voice
+          path: out/my-cloned-voice.wav
+          retention-days: 7

@@ -97,6 +97,20 @@ jobs:
         if: steps.due.outputs.go == 'true'
         run: pip install -r requirements.txt
 
+      - name: Voice model cache
+        if: steps.due.outputs.go == 'true' && (vars.NARRATION || 'clone') == 'clone' && hashFiles('voice/sample.*', 'channels/tech/voice/sample.*') != ''
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: voice-model-chatterbox-0.1.7
+
+      - name: Install voice cloning (your own voice, from voice/sample.*)
+        if: steps.due.outputs.go == 'true' && (vars.NARRATION || 'clone') == 'clone' && hashFiles('voice/sample.*', 'channels/tech/voice/sample.*') != ''
+        timeout-minutes: 15
+        run: |
+          pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-voice.txt
+
       - name: Make the Short
         if: steps.due.outputs.go == 'true'
         env:
@@ -133,6 +147,10 @@ jobs:
           PAID_BUDGET_USD: ${{ vars.PAID_BUDGET_USD }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           FREE_ONLY: ${{ vars.FREE_ONLY }}
+          # narration in the owner's own voice: clone (AI speaks in the voice of voice/sample.*) | record | optional | off
+          NARRATION: ${{ vars.NARRATION || 'clone' }}
+          NARRATION_LANGUAGE: ${{ vars.NARRATION_LANGUAGE || 'English' }}
+          VOICE_AHEAD: ${{ vars.VOICE_AHEAD || '3' }}
           SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && !inputs.only_if_due && inputs.skip_upload || 'false' }}
         run: python scripts/pipeline.py
 
@@ -156,6 +174,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git add channels/tech/stories.txt channels/tech/done.txt spend.txt
+          # narration scripts written, and scripts + recordings used up by this run
+          if [ -d channels/tech/voice ] || git ls-files --error-unmatch channels/tech/voice >/dev/null 2>&1; then git add -A channels/tech/voice; fi
           git diff --cached --quiet || git commit -m "chore: TECH published next story [skip ci]"
           # someone may have edited the queue on github.com during the run
           for i in 1 2 3; do git pull --rebase -q && git push && exit 0; sleep 5; done; exit 1
