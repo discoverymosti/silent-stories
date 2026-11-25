@@ -1,11 +1,11 @@
 # Silent Stories 🎬
 
-Automated YouTube Shorts channel. **No voice, no language barrier**: stories told with footage, short captions and music, so they work worldwide.
+Automated YouTube Shorts channel. **No voice, no language barrier**: stories told as **cartoon animation** (no real or photorealistic people), short captions and music, so they work worldwide.
 
 ```
-stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI images per scene (Gemini → Cloudflare FLUX → Pollinations,
+stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI cartoon images per scene (Gemini → Cloudflare FLUX → Pollinations,
                                                stock footage fallback)
-           ─► auto-edit: Ken Burns moves, crossfades, film look, captions, original music
+           ─► auto-edit: floating camera moves, snappy transitions, bright cartoon look, pop-in captions, original music
            ─► AI thumbnail ─► YouTube Short with title/description/hashtags/tags (one per window: 01-07 UTC Mon-Sat and 14-20 UTC daily)
 ```
 
@@ -74,6 +74,27 @@ Run one now: **Actions → Silent Stories - Publish Short → Run workflow → f
 2. **Structured shots:** every scene is labelled data: shot type, action, cast, location, lighting and camera move. It becomes a labelled prompt that repeats the exact saved descriptions.
 3. **One colour grade per film** (warm, cool, teal-orange, golden, muted or noir) is applied to every shot so they cut together.
 
+## Cartoon / animation look
+Every video is animation, never real or photorealistic people. One look is used for the whole channel so viewers recognise it:
+
+| `VISUAL_STYLE` variable | Look |
+|---|---|
+| `cartoon` *(default)* | 3D animated family-film cartoon: big expressive eyes, rounded shapes, vivid colours |
+| `2d` | flat 2D cartoon with bold outlines |
+| `anime` | anime line art and cel shading |
+| `storybook` | watercolour children's-book illustration |
+| `clay` | stop-motion claymation |
+| `comic` | comic-book ink and halftone |
+| any other text | used as your own style description |
+| `real` | the earlier live-action film look |
+
+What the cartoon mode changes:
+- **Characters:** the storyboard designs 1-3 cartoon characters (stylized people, animals, robots or objects that come alive) with a fixed design and one signature feature, repeated word for word in every shot.
+- **Built to hold attention:** every shot must show one big, readable emotion or action, something visibly changes in each scene, scene 1 opens mid-action, and there is a surprise in the middle and a bigger one at the end.
+- **Edit:** clean saturated colours (no film grain or vignette), stronger camera moves with a gentle float so stills feel alive, slide and circle transitions on Shorts, captions that pop in with a bounce.
+- **No real people as a fallback either:** if AI images fail, only Pixabay *animation* clips are used (Pexels is skipped, it has no animation filter).
+- The TECH channel follows the same variable; set `TECH_VISUAL_STYLE` to give it a different look.
+
 ## Growth features
 - **8 languages:** each upload carries its title and description in Spanish, Portuguese, Hindi, Indonesian, Arabic, French, German and Japanese (YouTube localizations). Viewers see them in their own language; the videos have no speech, so this removes the last language barrier. Change the list with the `YT_LANGUAGES` variable (e.g. `es,pt,hi`), empty = English only.
 - **Loop-friendly Shorts:** the first frame is the hook image (no fade from black) and the Short ends on its last image with the closing line, not a black card, so replays loop smoothly. The final shot echoes the first.
@@ -117,6 +138,8 @@ Silent tech Shorts (AI visuals, captions, original music, no voice), 2 a day, fr
 | `YT_PRIVACY` | `public` (`private` = upload for review, publish in YouTube Studio) |
 | `GEMINI_MODEL` | auto (newest Gemini Flash) |
 | `GEMINI_IMAGE_MODEL` | auto (newest Gemini image model) |
+| `VISUAL_STYLE` | `cartoon` (see [Cartoon / animation look](#cartoon--animation-look)); `real` = live-action look |
+| `TECH_VISUAL_STYLE` | same as `VISUAL_STYLE` (look of the TECH channel) |
 | `VISUAL_MODE` | `ai` (original AI images) or `stock` (Pixabay/Pexels) |
 | `CHANNEL_NAME` | `DiscoveryMosti` (shown on end card) |
 | `CHANNEL_HASHTAG` | `#DiscoveryMosti` |
