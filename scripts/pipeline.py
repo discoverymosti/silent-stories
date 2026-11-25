@@ -1700,8 +1700,8 @@ def build_metadata(sb: dict, report: dict, genre: str = "story") -> dict:
         "hashtags": hashtags,
         "social_caption": sb.get("social_caption", ""),
         "synthetic": bool(report.get("ai")),
-        # explainers/facts are educational; stories are film
-        "category_id": os.getenv("YT_CATEGORY") or ("28" if TECH else "27" if genre in ("explainer", "fact") else "1"),
+        # one category per channel: TECH = Science & Technology (28), main = Entertainment (24)
+        "category_id": os.getenv("YT_CATEGORY") or ("28" if TECH else "24"),
     }
 
 
@@ -1787,7 +1787,7 @@ def upload(video: Path, thumb: Path, meta: dict) -> str:
             "title": meta["title"],
             "description": meta["description"],
             "tags": meta["tags"],
-            "categoryId": meta.get("category_id", "1"),  # 1 = Film & Animation, 27 = Education
+            "categoryId": meta.get("category_id", "24"),  # 24 = Entertainment, 28 = Science & Technology
             "defaultLanguage": "en",
         },
         "status": {
