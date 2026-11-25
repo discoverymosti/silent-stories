@@ -99,7 +99,7 @@ What the cartoon mode changes:
 - **8 languages:** each upload carries its title and description in Spanish, Portuguese, Hindi, Indonesian, Arabic, French, German and Japanese (YouTube localizations). Viewers see them in their own language; the videos have no speech, so this removes the last language barrier. Change the list with the `YT_LANGUAGES` variable (e.g. `es,pt,hi`), empty = English only.
 - **Loop-friendly Shorts:** the first frame is the hook image (no fade from black) and the Short ends on its last image with the closing line, not a black card, so replays loop smoothly. The final shot echoes the first.
 - **Learns from your stats:** when new ideas are generated, the AI sees your most and least viewed uploads (read-only YouTube access, 1 quota unit) and leans toward what your audience watches.
-- **Right category:** explainers and facts upload as *Education*, stories as *Film & Animation* (override with `YT_CATEGORY`).
+- **Right category:** every main-channel video uploads as *Entertainment*, every Discovery Mosti TECH video as *Science & Technology* (override with `YT_CATEGORY`).
 - **No abstract filler when a few images are missing:** a missing shot is rebuilt from the nearest real image as a punch-in on another part of the frame with its own camera move (at most about a quarter of the shots); only beyond that does the quality check count filler.
 - **Self-repairing storyboards:** an incomplete AI answer is repaired or asked for again instead of failing the run.
 
