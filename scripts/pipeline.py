@@ -183,16 +183,38 @@ def add_tech_news() -> None:
         return
     try:
         hn = "https://hacker-news.firebaseio.com/v0"
+        found = []
         for sid in requests.get(f"{hn}/topstories.json", timeout=20).json()[:30]:
             it = requests.get(f"{hn}/item/{sid}.json", timeout=20).json() or {}
             title, url = " ".join(str(it.get("title", "")).replace("|", "/").split()), it.get("url", "")
             if (it.get("type") == "story" and url and it.get("score", 0) >= 200
                     and not re.match(r"(Ask|Show|Tell) HN", title) and title[:60] not in log):
-                STORIES.write_text(f"news | Tech news: {title} (source: {url})\n" + queue, encoding="utf-8")
-                print(f"  tech news added: {title}")
-                return
-    except (requests.RequestException, ValueError) as e:
-        print(f"  tech news unavailable ({e})")
+                found.append((title, url))
+        if not found:
+            return
+        # the front page also carries human-interest, politics and business drama: only a headline the
+        # AI confirms is about technology itself gets on the TECH channel
+        pick = json.loads(_strip_fences(ask_ai(TECH_NEWS_PROMPT.format(
+            headlines="\n".join(f"{i}. {t}" for i, (t, _) in enumerate(found))), creative=False))).get("pick")
+        if not isinstance(pick, int) or isinstance(pick, bool) or not 0 <= pick < len(found):
+            print("  tech news: no clear technology story on the front page right now, skipping")
+            return
+        title, url = found[pick]
+        STORIES.write_text(f"news | Tech news: {title} (source: {url})\n" + queue, encoding="utf-8")
+        print(f"  tech news added: {title}")
+    except (SystemExit, Exception) as e:  # noqa: BLE001 - news is a bonus; the queue has other ideas
+        print(f"  tech news unavailable ({str(e)[:150]})")
+
+
+TECH_NEWS_PROMPT = """These are today's most discussed headlines on a tech forum. A silent tech-explainer
+channel wants ONE of them for a 50-second video that explains a technology.
+Pick the first headline that is clearly about technology itself: software, hardware, AI, the internet,
+security, gadgets, engineering or a technical launch, where a video can show HOW something works or what
+changed for users.
+Never pick human-interest or personal stories, interviews, politics, crime, lawsuits, executive or
+company drama (hirings, firings, feuds), opinion essays, or headlines too vague to tell what they are about.
+{headlines}
+Return ONLY JSON: {{"pick": number}}  (the headline's number, or -1 if none qualifies)"""
 
 
 TECH_RULES = """TECH CHANNEL RULES ("{channel}" explains technology to everyone, without words)
@@ -205,6 +227,11 @@ TECH_RULES = """TECH CHANNEL RULES ("{channel}" explains technology to everyone,
   out before the free one appears; the last scene sums up. Name only real, well-known products you are sure
   are free, never star counts or prices you are not sure of.
 - Accuracy first: leave out any detail you are not sure of. Captions explain step by step, like a smart friend.
+- This is an EXPLAINER, never a drama: the technology is the star of every scene. No personal struggles,
+  sad, romantic or tear-jerking plots, family or animal stories, heroes or villains. A "news" video shows
+  what the technology is, what changed and why it matters to users, not the people or conflict behind it.
+  The guide character only demonstrates and reacts with curiosity or delight; it has no story of its own.
+- "music_mood" is curious, uplifting or tense, never sad or warm.
 - Visuals: {tech_visuals}. Generic, unbranded devices only: no logos, brand marks,
   real product photos or screenshots of real apps.
 - The description's last line invites viewers to subscribe to {channel} for tech explained without words.
@@ -255,7 +282,11 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
             "Each idea: one sentence with a clear character, situation and emotional or surprising payoff.",
             "Each idea: one sentence naming the technology and the surprising insight the viewer will get.").replace(
             "Mix genres: about half", "IGNORE: about half").replace(
-            "(any country; universal emotions)", "(any country; things people use every day)") + (
+            "(any country; universal emotions)", "(any country; things people use every day)").replace(
+            "Heroes can be people, animals, "
+             "robots or everyday objects that come alive, with big visible emotions and a visual surprise.",
+            "The technology is the star (cutaway views, the invisible made visible); never a drama or "
+            "an emotional character story.") + (
             '\nGenres for this tech channel: about half "explainer" (how a technology works), a fifth "tip" '
             '(a practical phone/PC/app/AI tip anyone can try), a fifth "list" (a numbered countdown of 4-6 '
             'items, e.g. free apps that replace paid ones, with the money or time saved) and the rest "product" '
@@ -485,6 +516,20 @@ ANIMATION + ENGAGEMENT RULES (viewers decide in the first second whether to keep
   and the biggest one in the last two scenes.
 - Simple, uncluttered backgrounds with one strong accent colour so the character pops on a phone.
 - Prefer a bright "grade" (warm, golden, cool or teal_orange) unless the story is truly dark.
+"""
+
+
+ENGAGE_RULES_TECH = """
+ANIMATION + ENGAGEMENT RULES (viewers decide in the first second whether to keep watching)
+- The technology carries the video: every shot shows one clear step, part or effect of it that reads with
+  the sound off (a cutaway, a signal travelling, a before/after). Never a character just standing or emoting.
+- Scene 1 opens on the device or problem itself, big and readable, with a caption that asks the question.
+- Something visibly changes in every scene: a new shot size, a deeper look inside, the next step or a
+  reveal. No two scenes in a row may share both shot size and location.
+- Use cartoon freedom to make the invisible visible (impossible scale, cutaway views, data as glowing
+  dots and arrows, simple visual metaphors). Put the key "aha" in the last two scenes.
+- Simple, uncluttered backgrounds with one strong accent colour so the subject pops on a phone.
+- Use a bright "grade" (cool, teal_orange, warm or golden).
 """
 
 
@@ -782,13 +827,26 @@ def polish_package(sb: dict) -> None:
         sb["title"], sb["thumbnail_text"] = title, new_thumb
 
 
+TECH_WORDING = [
+    ("they tell a story only through", "they explain technology only through"),
+    ("use universal emotions and\nsettings", "use everyday situations and\nsettings"),
+    ("- Clear arc: hook -> build -> turn -> emotional payoff.",
+     "- Clear arc: hook (a question) -> how it works, step by step -> the \"aha\" takeaway. Not a drama."),
+    ("emotional curiosity", "real curiosity about the technology"),
+    ("summarising the story naturally", "summarising the topic naturally"),
+    ("vertical image for this story", "vertical image for this topic"),
+    ('(refer to them by id, e.g. "A smiling through tears"), strong\n  emotion,',
+     '(refer to them by id, e.g. "A pointing at the open phone"), the technology shown\n  big and clear,'),
+]
+
+
 def storyboard(genre: str, idea: str) -> dict:
     prompt = STORYBOARD_PROMPT.format(
         genre=genre, idea=idea, channel=CHANNEL_NAME,
         images="cartoon animation images" if ANIMATED else "cinematic images",
         style_rule=STYLE_RULE_TOON.format(style=STYLE) if ANIMATED else STYLE_RULE_REAL,
         cast_rule=(CAST_RULE_TOON if ANIMATED else CAST_RULE_REAL).format(),
-        engage_rules=ENGAGE_RULES_TOON if ANIMATED else "")
+        engage_rules=(ENGAGE_RULES_TECH if TECH else ENGAGE_RULES_TOON) if ANIMATED else "")
     if FILM:
         start, end = prompt.index("STORY RULES"), prompt.index("VISUAL RULES")
         prompt = (prompt[:start] + FILM_RULES + "\n" + prompt[end:]).replace(
@@ -799,6 +857,11 @@ def storyboard(genre: str, idea: str) -> dict:
                                 "(see TECH CHANNEL RULES)").replace(
             "VISUAL RULES", TECH_RULES.format(channel=CHANNEL_NAME, tech_visuals=TECH_VISUALS_TOON if ANIMATED else TECH_VISUALS) + "\nVISUAL RULES", 1).replace(
             "invites viewers to subscribe for more silent stories", f"invites viewers to subscribe to {CHANNEL_NAME}")
+        # the shared prompt is written for emotional micro-dramas: TECH gets explainer wording instead
+        for old, new in TECH_WORDING:
+            if old not in prompt:
+                print(f"  note: tech wording not applied ({old[:40]!r} missing from the prompt)")
+            prompt = prompt.replace(old, new)
     for attempt in range(2):  # an incomplete storyboard gets one fresh try
         try:
             sb = json.loads(_strip_fences(ask_ai(prompt)))
@@ -814,9 +877,12 @@ def storyboard(genre: str, idea: str) -> dict:
     sb["description"] = str(sb.get("description") or idea).strip()
     if (src := re.search(r"\(source: (\S+)\)", idea)) and src.group(1) not in sb["description"]:
         sb["description"] += f"\nSource: {src.group(1)}"
-    sb["ending"] = str(sb.get("ending") or "Some stories need no words.").strip()
+    sb["ending"] = str(sb.get("ending") or ("Tech, explained without words." if TECH
+                                            else "Some stories need no words.")).strip()
     if sb.get("music_mood") not in CHORDS:
         sb["music_mood"] = "warm"
+    if TECH and sb["music_mood"] in ("sad", "warm"):  # explainer music, not drama music
+        sb["music_mood"] = "curious"
     for s in sb["scenes"]:
         try:
             secs = float(s.get("seconds", 4.5))
@@ -1614,7 +1680,7 @@ def build_metadata(sb: dict, report: dict, genre: str = "story") -> dict:
     tags, total = [], 0
     extra = ["tech explained", "technology", "tech shorts"] if TECH else ["silent stories", "no words story", "short film"]
     if ANIMATED:
-        extra += ["animation", "cartoon", "animated story"]
+        extra += ["animation", "cartoon", "animated explainer" if TECH else "animated story"]
     for t in [clean_tag(x) for x in sb.get("tags", [])] + [CHANNEL_NAME] + extra:
         if t and t.lower() not in (x.lower() for x in tags) and total + len(t) + 3 < 480:
             tags.append(t)
