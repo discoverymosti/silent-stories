@@ -148,7 +148,8 @@ jobs:
           FREE_ONLY: ${{ vars.FREE_ONLY }}
           # narration in the owner's own voice: clone (AI speaks in the voice of voice/sample.*) | record | optional | off
           NARRATION: ${{ vars.NARRATION || 'clone' }}
-          NARRATION_LANGUAGE: ${{ vars.NARRATION_LANGUAGE || 'English' }}
+          # the main (entertainment) channel is narrated in Hindi, the TECH channel in English
+          NARRATION_LANGUAGE: ${{ vars.NARRATION_LANGUAGE || 'Hindi' }}
           VOICE_AHEAD: ${{ vars.VOICE_AHEAD || '3' }}
           SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && !inputs.only_if_due && inputs.skip_upload || 'false' }}
         run: |

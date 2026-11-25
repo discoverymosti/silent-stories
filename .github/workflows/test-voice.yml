@@ -6,12 +6,14 @@ run-name: "Test my cloned voice (no upload)"
 on:
   workflow_dispatch:
     inputs:
-      text:
-        description: "What your cloned voice should say"
-        default: "Nobody ever asked why he couldn't sleep. Every night, he chose the same cold corner. And just like that, he had a home."
       language:
-        description: "Language of the text"
-        default: English
+        description: "Hindi = main channel, English = TECH channel"
+        type: choice
+        options: [Hindi, English]
+        default: Hindi
+      text:
+        description: "What your cloned voice should say (empty = a built-in test sentence in that language)"
+        default: ""
 
 permissions:
   contents: read
@@ -43,7 +45,13 @@ jobs:
           if [ -z "$SAMPLE" ]; then echo "::error::No voice sample yet: upload a 15-30 s clip of your voice as voice/sample.mp3"; exit 1; fi
           mkdir -p out
           ffmpeg -y -loglevel error -i "$SAMPLE" -map 0:a:0 -vn -af "highpass=f=80,afftdn=nf=-28,loudnorm=I=-18:TP=-2" -t 30 -ar 44100 -ac 1 out/sample.wav
-          python -c "import json, os; json.dump([os.environ['TEXT']], open('out/lines.json', 'w'))"
+          python - <<'PY'
+          import json, os
+          builtin = {"Hindi": "किसी ने कभी नहीं पूछा कि उसे नींद क्यों नहीं आती। हर रात वह उसी ठंडे कोने में बैठता था। और बस ऐसे ही, उसे एक घर मिल गया।",
+                     "English": "Nobody ever asked why he couldn't sleep. Every night, he chose the same cold corner. And just like that, he had a home."}
+          text = os.environ["TEXT"].strip() or builtin[os.environ["LANGUAGE"]]
+          json.dump([text], open("out/lines.json", "w", encoding="utf-8"), ensure_ascii=False)
+          PY
           python scripts/clone_voice.py out/sample.wav out/lines.json out "$LANGUAGE"
           mv out/line_00.wav out/my-cloned-voice.wav
       - uses: actions/upload-artifact@v7

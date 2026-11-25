@@ -602,7 +602,8 @@ SCREENPLAY_RULES_TECH = """SCREENPLAY RULES (write the screenplay first, then sh
 
 NARRATION_RULES = """NARRATION RULES (the channel's owner reads the narration aloud in their own voice; it is the heart of the video)
 - Every scene has a "narration": what the narrator SAYS while that picture is on screen, written in
-  {lang}, 1-2 short spoken sentences ({per_scene} words). All scenes together: {total} words.
+  {lang} (in that language's own script, e.g. Devanagari for Hindi, in the everyday words people
+  really speak, not formal or bookish language), 1-2 short spoken sentences ({per_scene} words). All scenes together: {total} words.
 - It is one continuous piece of storytelling by a warm, personal narrator: it flows from scene to
   scene, and read aloud on its own it is a complete, satisfying {piece}.
 - It adds what pictures cannot: what the character thinks or fears, why something matters, the

@@ -20,5 +20,7 @@ public too, but a clean sample is easier to misuse; make the repository private 
 - `NARRATION`: `clone` (default, as above) · `record` (you record every video yourself: the pipeline
   writes `voice/<story>/script.md`, you upload your recording into that folder, and the video is built
   around it) · `optional` (like record, silent when there is no recording) · `off` (silent videos).
-- `NARRATION_LANGUAGE`: language you narrate in (default `English`; Hindi, Spanish, Arabic and 19 more).
+- Language: the main (entertainment) channel is narrated in **Hindi**, the TECH channel in **English**.
+  Change them with `NARRATION_LANGUAGE` (main) and `TECH_NARRATION_LANGUAGE` (TECH); 23 languages work.
+  One sample serves both: the model keeps your voice across languages.
 - The TECH channel uses the same sample; a different one can go in `channels/tech/voice/sample.*`.
