@@ -2,14 +2,15 @@
 Silent Stories -> YouTube pipeline (fully automatic, copyright-safe):
 daily vertical Shorts, plus a weekly widescreen short film with VIDEO_FORMAT=film.
 
-No voiceover. Original AI visuals + animated captions + original music, so it works
-in every language and contains no third-party copyrighted material.
+No voiceover. Original AI cartoon / animation visuals (VISUAL_STYLE, no real or photorealistic
+people) + animated captions + original music, so it works in every language and contains no
+third-party copyrighted material.
 
 1. Take the next idea from stories.txt
 2. Gemini (or Claude) writes the storyboard + SEO/SMO metadata
 3. Each scene gets an ORIGINAL AI image (Gemini image -> Cloudflare FLUX -> Pollinations),
    or stock footage (Pixabay/Pexels) if VISUAL_MODE=stock or AI fails
-4. Auto-edit: Ken Burns camera moves, crossfades, film look, animated captions,
+4. Auto-edit: camera moves with a gentle float, snappy transitions, bright cartoon look, pop-in captions,
    end card, synthesized music (original, no copyright)
 5. AI thumbnail with title text
 6. Upload to YouTube as a Short with SEO title/description/hashtags/tags + thumbnail
@@ -91,6 +92,28 @@ GEMINI_IMAGE_USD = float(os.getenv("GEMINI_IMAGE_USD") or 0.07)  # cautious esti
 NO_TEXT = ("No text, no letters, no captions, no logos, no watermark, no brand names, "
            "no real celebrities, no copyrighted characters.")
 
+# One animated look for the whole channel: every video is a cartoon, never real or photorealistic people.
+# VISUAL_STYLE = one of the names below, your own style description, or "real" for the old live-action look.
+STYLES = {
+    "cartoon": "3D animated cartoon, stylized characters with big expressive eyes and simple rounded shapes, "
+               "bold readable silhouettes, vibrant saturated colours, soft warm lighting, "
+               "polished animated family film look",
+    "2d": "2D cartoon illustration, bold clean outlines, flat cel shading, bright saturated colours, "
+          "simple expressive characters, hand-drawn animated series look",
+    "anime": "anime illustration, clean line art, cel shading, large expressive eyes, "
+             "richly painted backgrounds, animated film look",
+    "storybook": "children's storybook illustration, soft watercolour and gouache textures, "
+                 "gentle rounded characters, warm cosy palette",
+    "clay": "stop-motion claymation, handmade clay characters with simple faces, miniature handcrafted sets, "
+            "soft studio lighting",
+    "comic": "comic book illustration, bold ink outlines, halftone shading, dynamic poses, punchy flat colours",
+}
+VISUAL_STYLE = " ".join((os.getenv("VISUAL_STYLE") or "cartoon").split())
+ANIMATED = VISUAL_STYLE.lower() != "real"
+STYLE = STYLES.get(VISUAL_STYLE.lower(), VISUAL_STYLE) if ANIMATED else ""
+TOON_ONLY = ("Fully animated artwork: every person, animal and object is drawn as a stylized cartoon character, "
+             "nothing looks like a photo or live-action footage.")
+
 
 # ================================================================ queue
 
@@ -133,10 +156,10 @@ def uploaded_within(hours: float) -> bool:
 
 
 REFILL_PROMPT = """You plan content for "{channel}", a worldwide YouTube channel of SILENT stories:
-no voiceover, no dialogue, only cinematic images, short captions and music.
+no voiceover, no dialogue, only {images}, short captions and music.
 {learn}Write {n} NEW, original {kind} ideas for a global audience (any country; universal emotions).
 Each idea: one sentence with a clear character, situation and emotional or surprising payoff.
-{genres}
+{toon}{genres}
 Do not repeat or closely resemble any of these existing ideas:
 {existing}
 Return ONLY JSON: {{"ideas": [{{"genre": str, "idea": str}}]}}"""
@@ -182,12 +205,18 @@ TECH_RULES = """TECH CHANNEL RULES ("{channel}" explains technology to everyone,
   out before the free one appears; the last scene sums up. Name only real, well-known products you are sure
   are free, never star counts or prices you are not sure of.
 - Accuracy first: leave out any detail you are not sure of. Captions explain step by step, like a smart friend.
-- Visuals: clean modern tech look (macro shots of chips and circuits, glowing data, hands using generic
-  devices, simple diagram-like compositions). Generic, unbranded devices only: no logos, brand marks,
+- Visuals: {tech_visuals}. Generic, unbranded devices only: no logos, brand marks,
   real product photos or screenshots of real apps.
 - The description's last line invites viewers to subscribe to {channel} for tech explained without words.
 """
 
+
+
+TECH_VISUALS = ("clean modern tech look (macro shots of chips and circuits, glowing data, hands using generic "
+                "devices, simple diagram-like compositions)")
+TECH_VISUALS_TOON = ("bright, friendly cartoon tech look: chunky stylized devices, cutaway views that show the "
+                     "inside, data drawn as glowing dots and arrows, simple diagram-like compositions; a small "
+                     "recurring cartoon guide character (a curious robot or a stylized person) reacts to each step")
 
 
 def refill_queue(min_left: int = 2 if FILM else 5) -> None:
@@ -211,7 +240,10 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
                  + "\nWhat worked least (avoid repeating these angles):\n"
                  + "\n".join(f"- {t} ({v} views)" for t, v in perf[-min(3, half):]) + "\n\n")
     prompt = REFILL_PROMPT.format(
-        channel=CHANNEL_NAME, n=n, learn=learn,
+        channel=CHANNEL_NAME, n=n, learn=learn, images="cartoon animation" if ANIMATED else "cinematic images",
+        toon="The videos are CARTOONS: pick ideas that are fun to watch animated. Heroes can be people, animals, "
+             "robots or everyday objects that come alive, with big visible emotions and a visual surprise.\n"
+        if ANIMATED else "",
         kind="three-act short-film (about 3 minutes)" if FILM else "YouTube Shorts (about 50 seconds)",
         genres='genre is always "story".' if FILM else
         'Mix genres: about half "story" (emotional micro-drama), a quarter "explainer" (how something '
@@ -368,7 +400,7 @@ def decide_tier() -> None:
 
 STORYBOARD_PROMPT = """You are the director and growth marketer of "{channel}", a YouTube
 Shorts channel. Videos have NO voiceover and NO dialogue: they tell a story only through
-cinematic images, very short on-screen captions and music, so anyone in any country can follow.
+{images}, very short on-screen captions and music, so anyone in any country can follow.
 The audience is GLOBAL (Americas, Europe, Asia, Africa, Middle East): use universal emotions and
 settings, characters of varied ethnicities and cultures, no country-specific festivals, slang or
 symbols unless the idea itself needs them, and simple English any viewer can read.
@@ -389,12 +421,9 @@ STORY RULES
 VISUAL RULES (images are AI-generated; work like a film crew so every shot matches)
 - First write the blueprint, then the shots. Every image is generated separately, so
   consistency comes ONLY from re-using the exact same saved descriptions.
-- "style": one visual style for the whole film (e.g. "cinematic film still, 35mm lens,
-  shallow depth of field, soft film grain").
+{style_rule}
 - "grade": one colour grade for the whole film: warm, cool, teal_orange, golden, muted or noir.
-- "cast": saved character elements, 1-3 people/animals:
-  [{{"id": "A", "name": "short role noun, e.g. old kite maker", "look": "fixed visual
-  description: age, ethnicity, build, hair, face, exact clothes and colours"}}].
+- "cast": saved character elements, {cast_rule}"}}].
   Same clothes all film unless the story says otherwise. Names must be distinct.
 - "locations": saved location elements, 1-4 places:
   [{{"id": "L1", "look": "fixed description: place, era, materials, colours, time of day"}}].
@@ -406,8 +435,8 @@ VISUAL RULES (images are AI-generated; work like a film crew so every shot match
   "lighting": e.g. "warm window light from the left, soft shadows",
   "camera": one of zoom_in, zoom_out, pan_left, pan_right, pan_up,
   "query": 2-4 word stock-video search fallback (e.g. "rain on window").
-- Original people only, no celebrities, brands, logos, readable text, or copyrighted characters.
-
+- Original characters only, no celebrities, brands, logos, readable text, or copyrighted characters.
+{engage_rules}
 SEO / SMO RULES
 - "title": max 60 chars, main search keyword in the first 4 words, emotional curiosity,
   honest (no clickbait lies), no hashtags, no ALL CAPS.
@@ -430,6 +459,33 @@ Return ONLY valid JSON with exactly these keys:
   "cast": [{{"id": str, "name": str, "look": str}}], "locations": [{{"id": str, "look": str}}],
   "scenes": [{{"shot": str, "image_prompt": str, "cast": [str], "location": str,
                "lighting": str, "camera": str, "query": str, "caption": str, "seconds": number}}]}}"""
+
+
+STYLE_RULE_REAL = """- "style": one visual style for the whole film (e.g. "cinematic film still, 35mm lens,
+  shallow depth of field, soft film grain")."""
+STYLE_RULE_TOON = """- "style": write exactly "{style}". The whole video is ANIMATION in this one look:
+  never real, photorealistic or live-action people, and no camera or lens words (no "photo", "35mm", "film still")."""
+CAST_RULE_REAL = """1-3 people/animals:
+  [{{"id": "A", "name": "short role noun, e.g. old kite maker", "look": "fixed visual
+  description: age, ethnicity, build, hair, face, exact clothes and colours"""
+CAST_RULE_TOON = """1-3 CARTOON characters (stylized people, animals, robots or
+  everyday objects that come alive):
+  [{{"id": "A", "name": "short role noun, e.g. old kite maker", "look": "fixed character design:
+  what it is, age, body shape and size, skin/fur/material colour, hair, eyes, one signature
+  feature that makes it recognisable at a glance, exact clothes and colours"""
+ENGAGE_RULES_TOON = """
+ANIMATION + ENGAGEMENT RULES (viewers decide in the first second whether to keep watching)
+- Acting carries the story: every shot shows one clear, exaggerated emotion or action that reads with
+  the sound off (wide eyes, jaw drop, slumped shoulders, a leap of joy). Never a neutral standing pose.
+- Scene 1 opens in the middle of the action with the main character in a big, readable pose.
+- Something visibly changes in every scene: a new shot size, place, emotion or a reveal. No two
+  scenes in a row may share both shot size and location.
+- Use cartoon freedom: things real footage cannot show (impossible scale, objects with feelings,
+  cutaway views, visual metaphors, a funny or touching surprise). Put one surprise near the middle
+  and the biggest one in the last two scenes.
+- Simple, uncluttered backgrounds with one strong accent colour so the character pops on a phone.
+- Prefer a bright "grade" (warm, golden, cool or teal_orange) unless the story is truly dark.
+"""
 
 
 FILM_RULES = """STORY RULES (weekly widescreen SHORT FILM, not a Short)
@@ -727,7 +783,12 @@ def polish_package(sb: dict) -> None:
 
 
 def storyboard(genre: str, idea: str) -> dict:
-    prompt = STORYBOARD_PROMPT.format(genre=genre, idea=idea, channel=CHANNEL_NAME)
+    prompt = STORYBOARD_PROMPT.format(
+        genre=genre, idea=idea, channel=CHANNEL_NAME,
+        images="cartoon animation images" if ANIMATED else "cinematic images",
+        style_rule=STYLE_RULE_TOON.format(style=STYLE) if ANIMATED else STYLE_RULE_REAL,
+        cast_rule=(CAST_RULE_TOON if ANIMATED else CAST_RULE_REAL).format(),
+        engage_rules=ENGAGE_RULES_TOON if ANIMATED else "")
     if FILM:
         start, end = prompt.index("STORY RULES"), prompt.index("VISUAL RULES")
         prompt = (prompt[:start] + FILM_RULES + "\n" + prompt[end:]).replace(
@@ -736,7 +797,7 @@ def storyboard(genre: str, idea: str) -> dict:
         prompt = prompt.replace('("story" = emotional micro-drama / short film, "explainer" = how something\n'
                                 '                  works, "fact" = surprising true fact told visually)',
                                 "(see TECH CHANNEL RULES)").replace(
-            "VISUAL RULES", TECH_RULES.format(channel=CHANNEL_NAME) + "\nVISUAL RULES", 1).replace(
+            "VISUAL RULES", TECH_RULES.format(channel=CHANNEL_NAME, tech_visuals=TECH_VISUALS_TOON if ANIMATED else TECH_VISUALS) + "\nVISUAL RULES", 1).replace(
             "invites viewers to subscribe for more silent stories", f"invites viewers to subscribe to {CHANNEL_NAME}")
     for attempt in range(2):  # an incomplete storyboard gets one fresh try
         try:
@@ -769,6 +830,8 @@ def storyboard(genre: str, idea: str) -> dict:
         if isinstance(s.get("cast"), str):
             s["cast"] = [s["cast"]]
     sb.setdefault("style", "cinematic film still, soft natural light, 35mm, shallow depth of field")
+    if ANIMATED:
+        sb["style"] = STYLE  # one channel look, whatever the storyboard answered
     sb.setdefault("characters", "")
     sb["cast"] = [c for c in sb.get("cast") or [] if isinstance(c, dict) and c.get("look")]
     sb["locations"] = [l for l in sb.get("locations") or [] if isinstance(l, dict) and l.get("look")]
@@ -798,6 +861,8 @@ def full_prompt(sb: dict, scene: dict | str) -> str:
     for i in ids:  # "A smiles" -> "the old kite maker smiles": no letters for the model to draw
         action = re.sub(rf"\b{re.escape(i)}\b", f"the {names[i]}", action)
     parts = [f"Shot: {scene.get('shot') or 'medium shot'}", f"Action: {action}"]
+    if ANIMATED:  # the look comes first: image models weigh the start of a prompt most
+        parts.insert(0, STYLE[0].upper() + STYLE[1:])
     if ids:
         parts.append("Characters: " + "; ".join(f"the {names[i]}: {cast[i]}" for i in ids))
     elif sb.get("characters"):
@@ -806,9 +871,14 @@ def full_prompt(sb: dict, scene: dict | str) -> str:
         parts.append(f"Location: {places[scene['location']]}")
     if scene.get("lighting"):
         parts.append(f"Lighting: {scene['lighting']}")
-    parts += [f"Style: {sb['style']}", f"Colour grade: {sb.get('grade', 'teal_orange').replace('_', '-')}",
-              f"Format: {'widescreen 16:9' if FILM else 'vertical 9:16'} cinematic photo"]
-    return ". ".join(parts) + f". {NO_TEXT}"
+    shape = "widescreen 16:9" if FILM else "vertical 9:16"
+    if ANIMATED:
+        parts += [f"Colour palette: {sb.get('grade', 'warm').replace('_', ' and ')} tones",
+                  f"Format: {shape} frame from an animated film", TOON_ONLY]
+    else:
+        parts += [f"Style: {sb['style']}", f"Colour grade: {sb.get('grade', 'teal_orange').replace('_', '-')}",
+                  f"Format: {shape} cinematic photo"]
+    return ". ".join(x.rstrip(".") for x in parts) + f". {NO_TEXT}"
 
 
 def gen_image_gemini(prompt: str, dest: Path) -> bool:
@@ -1095,7 +1165,7 @@ def gen_image(prompt: str, dest: Path, seed: int, best: bool = False) -> str | N
 
 def pexels_search(query: str, used: set[int]) -> str | None:
     key = os.getenv("PEXELS_API_KEY")
-    if not key:
+    if not key or ANIMATED:  # Pexels has no animation filter: its clips show real people
         return None
     r = requests.get("https://api.pexels.com/videos/search", headers={"Authorization": key},
                      params={"query": query, "orientation": "landscape" if FILM else "portrait", "per_page": 15}, timeout=30)
@@ -1118,7 +1188,8 @@ def pixabay_search(query: str, used: set[int]) -> str | None:
     if not key:
         return None
     r = requests.get("https://pixabay.com/api/videos/",
-                     params={"key": key, "q": query[:100], "per_page": 20, "safesearch": "true"}, timeout=30)
+                     params={"key": key, "q": query[:100], "per_page": 20, "safesearch": "true",
+                             "video_type": "animation" if ANIMATED else "all"}, timeout=30)
     if r.status_code != 200:
         return None
     hits = [h for h in r.json().get("hits", []) if h["id"] not in used and h.get("duration", 0) >= 3]
@@ -1164,7 +1235,9 @@ GRADES = {  # one grade per film keeps every shot's colour consistent
     "muted":       "eq=saturation=0.82",
     "noir":        "hue=s=0,eq=contrast=1.12",
 }
-_BASE_LOOK = "eq=contrast=1.06:saturation=1.03,vignette=PI/5,noise=alls=3:allf=t"
+# live action gets a film look (vignette, grain); animation stays clean, bright and saturated
+_BASE_LOOK = ("eq=contrast=1.05:saturation=1.16" if ANIMATED
+              else "eq=contrast=1.06:saturation=1.03,vignette=PI/5,noise=alls=3:allf=t")
 LOOK = _BASE_LOOK
 
 
@@ -1195,15 +1268,21 @@ def font_file(bold: bool = True) -> str:
 
 def kenburns(img: Path, seconds: float, motion: str, dest: Path) -> None:
     n = int(round(seconds * FPS))
-    z = 0.14
+    z, z0 = (0.18, 1.03) if ANIMATED else (0.14, 1.0)
     moves = {
-        "zoom_in":   (f"1+{z}*on/{n}", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),
-        "zoom_out":  (f"1+{z}-{z}*on/{n}", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),
+        "zoom_in":   (f"{z0}+{z}*on/{n}", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),
+        "zoom_out":  (f"{z0}+{z}-{z}*on/{n}", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),
         "pan_left":  (f"1+{z}", f"(iw-iw/zoom)*(1-on/{n})", "ih/2-(ih/zoom/2)"),
         "pan_right": (f"1+{z}", f"(iw-iw/zoom)*on/{n}", "ih/2-(ih/zoom/2)"),
         "pan_up":    (f"1+{z}", "iw/2-(iw/zoom/2)", f"(ih-ih/zoom)*(1-on/{n})"),
     }
     zz, xx, yy = moves.get(motion, moves["zoom_in"])
+    if ANIMATED:  # a slow float across the move's free axis, so a still picture feels alive
+        bob = f"+{W // 90}*sin(2*PI*on/{int(FPS * 2.6)})"
+        if motion == "pan_up":
+            xx += bob
+        else:
+            yy += bob
     # upscale first so the slow zoom stays sharp and jitter-free
     vf = (f"scale={W * 2}:{H * 2}:force_original_aspect_ratio=increase,crop={W * 2}:{H * 2},"
           f"zoompan=z='{zz}':x='{xx}':y='{yy}':d={n}:s={W}x{H}:fps={FPS},setsar=1,{LOOK}")
@@ -1247,7 +1326,9 @@ def crossfade_all(parts: list[Path], lengths: list[float], dest: Path, fade_ends
     inputs = sum((["-i", str(p)] for p in parts), [])
     chain, prev = [], "[0:v]"
     for i in range(1, len(parts)):
-        trans = "fadeblack" if fade_ends and i == len(parts) - 1 else random.choice(["fade", "fade", "dissolve", "smoothleft"])
+        trans = "fadeblack" if fade_ends and i == len(parts) - 1 else random.choice(
+            ["fade", "slideleft", "slideup", "smoothleft", "circleopen"] if ANIMATED and not FILM
+            else ["fade", "fade", "dissolve", "smoothleft"])
         out = f"[v{i}]"
         chain.append(f"{prev}[{i}:v]xfade=transition={trans}:duration={XF}:offset={starts[i]:.3f}{out}")
         prev = out
@@ -1295,8 +1376,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         cap = ass_escape(s.get("caption", "").strip())
         if cap:
             a, b = t + XF * 0.6, t + s["seconds"] - XF
-            lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Cap,,0,0,0,,"
-                         f"{{\\fad(280,220)\\t(0,280,\\fscx104\\fscy104)\\t(280,500,\\fscx100\\fscy100)}}{cap}")
+            fx = ("\\fad(90,180)\\fscx55\\fscy55\\t(0,170,\\fscx114\\fscy114)\\t(170,300,\\fscx100\\fscy100)"
+                  if ANIMATED else  # cartoon captions pop in with a bounce
+                  "\\fad(280,220)\\t(0,280,\\fscx104\\fscy104)\\t(280,500,\\fscx100\\fscy100)")
+            lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Cap,,0,0,0,,{{{fx}}}{cap}")
     lines += progress_dots(scenes, starts, end_start)
     a, b = end_start + 0.5, end_start + end_len - 0.3
     lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},End,,0,0,0,,{{\\fad(600,400)}}{ass_escape(ending)}")
@@ -1530,6 +1613,8 @@ def build_metadata(sb: dict, report: dict, genre: str = "story") -> dict:
     hashtags = list(dict.fromkeys(hashtags + [CHANNEL_TAG, "#ShortFilm" if FILM else "#Shorts"]))[:6]
     tags, total = [], 0
     extra = ["tech explained", "technology", "tech shorts"] if TECH else ["silent stories", "no words story", "short film"]
+    if ANIMATED:
+        extra += ["animation", "cartoon", "animated story"]
     for t in [clean_tag(x) for x in sb.get("tags", [])] + [CHANNEL_NAME] + extra:
         if t and t.lower() not in (x.lower() for x in tags) and total + len(t) + 3 < 480:
             tags.append(t)

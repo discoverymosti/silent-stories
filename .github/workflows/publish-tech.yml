@@ -108,6 +108,7 @@ jobs:
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           GEMINI_IMAGE_MODEL: ${{ vars.GEMINI_IMAGE_MODEL }}
           VISUAL_MODE: ${{ vars.VISUAL_MODE || 'ai' }}
+          VISUAL_STYLE: ${{ vars.TECH_VISUAL_STYLE || vars.VISUAL_STYLE || 'cartoon' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
