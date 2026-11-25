@@ -483,8 +483,10 @@ SEO / SMO RULES
 - "thumbnail_text": 2-4 words, punchy, uppercase, and NO word from the title: the thumbnail says
   what the title doesn't, so together they make one hook.
 
-Return ONLY valid JSON with exactly these keys:
-{{"title": str, "description": str, "hashtags": [str], "tags": [str],
+Return ONLY valid JSON with exactly these keys ("logline" and "beats" first: they are the plan
+the scenes must follow):
+{{"logline": str, "beats": [str],
+  "title": str, "description": str, "hashtags": [str], "tags": [str],
   "social_caption": str, "thumbnail_prompt": str, "thumbnail_text": str,
   "style": str, "grade": str, "music_mood": str, "ending": str,
   "cast": [{{"id": str, "name": str, "look": str}}], "locations": [{{"id": str, "look": str}}],
@@ -532,6 +534,66 @@ ANIMATION + ENGAGEMENT RULES (viewers decide in the first second whether to keep
 - Use a bright "grade" (cool, teal_orange, warm or golden).
 """
 
+
+SCREENPLAY_RULES = """SCREENPLAY RULES (write the screenplay first, then shoot it)
+- "logline": one sentence: who wants what, what stands in the way, and how it ends.
+- "beats": the whole screenplay, one short line per scene, in order. Every beat happens BECAUSE of
+  the one before it ("so..." or "but...", never "and then..."). Then write exactly one scene per beat.
+- One question is raised in scene 1 and answered only in the last two scenes; every scene in
+  between moves the character closer to the answer or further from it. No scene repeats another.
+- Pictures and captions share the work: a caption never describes what the picture already shows.
+  It adds what a picture cannot: a thought, a time jump ("Every night, for a year"), what is at
+  stake, a twist. Read alone from top to bottom, the captions still tell the story.
+- Scene 1 always has a caption. Silent beats ("") belong on the strongest pictures (the turn, the
+  reveal), never two in a row, and no caption is used twice.
+- Each "image_prompt" says who does what, and shows the NEXT moment of the story, not the same
+  moment again from another angle.
+- A caption needs time to be read: about 1.5 seconds plus half a second per word.
+"""
+SCREENPLAY_RULES_TECH = """SCREENPLAY RULES (write the screenplay first, then shoot it)
+- "logline": one sentence: the question the video asks and the answer the viewer leaves with.
+- "beats": the whole screenplay, one short line per scene, in order. Every beat explains or
+  follows from the one before it; nothing is skipped. Then write exactly one scene per beat.
+- The question is asked in scene 1 and fully answered only in the last two scenes. No scene
+  repeats another.
+- Pictures and captions share the work: a caption never describes what the picture already shows.
+  It names the step, the reason or the number the picture cannot. Read alone from top to bottom,
+  the captions still explain the topic.
+- Scene 1 always has a caption. Silent beats ("") belong on the clearest pictures, never two in a
+  row, and no caption is used twice.
+- Each "image_prompt" shows the NEXT step, not the same step again from another angle.
+- A caption needs time to be read: about 1.5 seconds plus half a second per word.
+"""
+
+# what the code checks after the AI answers (same numbers as the rules in the prompts)
+SCENES_OK, TOTAL_OK, CAPTION_WORDS = ((16, 26), (150.0, 190.0), 8) if FILM else ((8, 12), (45.0, 55.0), 7)
+
+SCREENPLAY_FIX_PROMPT = """You are the script editor of "{channel}", a channel of SILENT videos (no voice;
+pictures, very short captions and music). Rewrite the scenes of this screenplay so that every
+problem below is fixed. Keep what already works: the same idea, the same characters and places.
+
+Idea: {idea}
+Characters (use only these ids in "cast"): {cast}
+Locations (use only these ids in "location"): {locations}
+
+PROBLEMS TO FIX
+{problems}
+
+RULES
+- {min_scenes} to {max_scenes} scenes that add up to {min_total:g}-{max_total:g} seconds.
+- Captions: max {words} simple words, present tense, no emojis. Scene 1 has a caption. A few scenes
+  have "" (silent beats), never two in a row, and no caption is used twice.
+- A caption never describes what the picture already shows; it adds a thought, a time jump, the
+  stakes or a twist. Read alone from top to bottom, the captions still tell it all.
+- Every scene follows from the one before it and shows a new moment. No two scenes in a row share
+  both "shot" and "location".
+- Keep every field of every scene.
+
+CURRENT SCENES
+{scenes}
+
+Return ONLY JSON: {{"beats": [str], "scenes": [{{"shot": str, "image_prompt": str, "cast": [str],
+  "location": str, "lighting": str, "camera": str, "query": str, "caption": str, "seconds": number}}]}}"""
 
 FILM_RULES = """STORY RULES (weekly widescreen SHORT FILM, not a Short)
 - 18 to 24 scenes, total 150-190 seconds, each scene 6-10 seconds (let shots breathe).
@@ -768,6 +830,105 @@ def storyboard_problem(sb) -> str:
     return ""
 
 
+def _caption(scene: dict) -> str:
+    return " ".join(str(scene.get("caption") or "").split())
+
+
+def screenplay_problems(sb: dict) -> list[str]:
+    """What is wrong with the screenplay as written ([] if nothing): the rules the prompt asks for,
+    checked in code, because the free models often ignore some of them."""
+    scenes, out = sb["scenes"], []
+    caps = [_caption(s) for s in scenes]
+    if not SCENES_OK[0] <= len(scenes) <= SCENES_OK[1]:
+        out.append(f"there are {len(scenes)} scenes; write {SCENES_OK[0]} to {SCENES_OK[1]}")
+    long = [f"scene {i + 1} (\"{c}\")" for i, c in enumerate(caps) if len(c.split()) > CAPTION_WORDS]
+    if long:
+        out.append(f"captions longer than {CAPTION_WORDS} words: {', '.join(long)}")
+    if not caps[0]:
+        out.append("scene 1 has no caption; the hook needs a caption that raises a question")
+    silent = sum(1 for c in caps if not c)
+    if silent == 0 and not TECH:  # an explainer may name every step
+        out.append("every scene has a caption; leave 2-3 strong pictures silent (\"\")")
+    elif silent > len(scenes) // 2:
+        out.append(f"{silent} of {len(scenes)} scenes have no caption; the story can't be followed. "
+                   "Only about a third may be silent")
+    if any(not a and not b for a, b in zip(caps, caps[1:])) and len(scenes) - silent >= 3:
+        out.append("two silent scenes in a row; put a caption on one of them")
+    seen, twice = set(), []
+    for c in caps:
+        if c and c.lower() in seen and c not in twice:
+            twice.append(c)
+        seen.add(c.lower())
+    if twice:
+        out.append("the same caption is used twice: " + ", ".join(f'"{c}"' for c in twice))
+    same = [f"{i + 1}-{i + 2}" for i, (a, b) in enumerate(zip(scenes, scenes[1:]))
+            if a.get("shot") and a.get("location") and a.get("shot") == b.get("shot")
+            and a.get("location") == b.get("location")]
+    if len(same) > (1 if FILM else 0) + len(scenes) // 6:  # a couple are fine, a row of them is a slideshow
+        out.append(f"scenes {', '.join(same)} share the same shot size and location; vary the shots")
+    cast = {c.get("id") for c in sb.get("cast") or [] if isinstance(c, dict)}
+    places = {l.get("id") for l in sb.get("locations") or [] if isinstance(l, dict)}
+    bad = [str(i + 1) for i, s in enumerate(scenes)
+           if (cast and any(not isinstance(c, str) or c not in cast for c in
+                            ([s["cast"]] if isinstance(s.get("cast"), str) else s.get("cast") or []))
+               and isinstance(s.get("cast"), (str, list)))
+           or (places and isinstance(s.get("location"), str) and s["location"] and s["location"] not in places)]
+    if bad:
+        out.append(f"scenes {', '.join(bad)} use a character or location id that is not in the saved list")
+    return out
+
+
+def fix_screenplay(sb: dict, idea: str) -> None:
+    """Check the screenplay and let the AI rewrite the scenes once when rules are broken (best effort:
+    the rewrite is kept only if it is complete and has fewer problems)."""
+    problems = screenplay_problems(sb)
+    if not problems:
+        print("  screenplay check: OK")
+        return
+    print(f"  screenplay check: {'; '.join(x[:160] for x in problems)}")
+    keys = ("shot", "image_prompt", "cast", "location", "lighting", "camera", "query", "caption", "seconds")
+    try:
+        fix = json.loads(_strip_fences(ask_ai(SCREENPLAY_FIX_PROMPT.format(
+            channel=CHANNEL_NAME, idea=idea, problems="\n".join(f"- {x}" for x in problems),
+            cast=json.dumps([{k: c.get(k) for k in ("id", "name")} for c in sb.get("cast") or []
+                             if isinstance(c, dict)], ensure_ascii=False) or "[]",
+            locations=json.dumps([l.get("id") for l in sb.get("locations") or [] if isinstance(l, dict)]),
+            min_scenes=SCENES_OK[0] + 1, max_scenes=SCENES_OK[1] - 1, min_total=TOTAL_OK[0], max_total=TOTAL_OK[1],
+            words=CAPTION_WORDS,
+            scenes=json.dumps([{k: s.get(k) for k in keys} for s in sb["scenes"]], ensure_ascii=False, indent=1)))))
+        new = dict(sb, scenes=fix["scenes"])
+        if storyboard_problem(new):
+            raise ValueError(storyboard_problem(new))
+    except (SystemExit, Exception) as e:  # noqa: BLE001 - the first draft is still a usable video
+        print(f"  could not rewrite the screenplay ({str(e)[:100]}); keeping the first draft")
+        return
+    left = screenplay_problems(new)
+    if len(left) < len(problems):
+        sb["scenes"] = new["scenes"]
+        if isinstance(fix.get("beats"), list):
+            sb["beats"] = fix["beats"]
+        print("  screenplay rewritten" + (f" (still: {'; '.join(x[:160] for x in left)})" if left else ": all fixed"))
+    else:
+        print("  the rewrite was no better; keeping the first draft")
+
+
+def time_screenplay(scenes: list[dict]) -> None:
+    """Scene lengths the edit can rely on: the whole video inside the planned running time, and every
+    caption on screen long enough to be read."""
+    lo, hi = 3.0, 10.0 if FILM else 7.0
+    total = sum(s["seconds"] for s in scenes)
+    if not TOTAL_OK[0] <= total <= TOTAL_OK[1]:
+        want = min(max(total, TOTAL_OK[0]), TOTAL_OK[1])
+        for s in scenes:
+            s["seconds"] = max(lo, min(hi, s["seconds"] * want / total))
+        print(f"  timing: scenes added up to {total:.0f} s, stretched/tightened to {sum(s['seconds'] for s in scenes):.0f} s")
+    for s in scenes:
+        words = len(s["caption"].split())
+        if words:  # the caption is hidden during the crossfades at both ends of the scene
+            s["seconds"] = max(s["seconds"], min(hi, 1.6 + 0.45 * words))
+        s["seconds"] = round(s["seconds"], 2)
+
+
 # Title + thumbnail checked as one pairing, as viewers see them. Rules adapted from the title linter
 # of github.com/Jakeschincariol/youtube-agent-skill (MIT).
 VAGUE_WORDS = {"amazing", "incredible", "insane", "crazy", "huge", "massive", "ultimate", "best",
@@ -857,6 +1018,7 @@ def storyboard(genre: str, idea: str) -> dict:
         start, end = prompt.index("STORY RULES"), prompt.index("VISUAL RULES")
         prompt = (prompt[:start] + FILM_RULES + "\n" + prompt[end:]).replace(
             "YouTube\nShorts channel", "YouTube\nchannel").replace("vertical image", "widescreen 16:9 image")
+    prompt = prompt.replace("VISUAL RULES", (SCREENPLAY_RULES_TECH if TECH else SCREENPLAY_RULES) + "\nVISUAL RULES", 1)
     if TECH:
         prompt = prompt.replace('("story" = emotional micro-drama / short film, "explainer" = how something\n'
                                 '                  works, "fact" = surprising true fact told visually)',
@@ -889,6 +1051,9 @@ def storyboard(genre: str, idea: str) -> dict:
         sb["music_mood"] = "warm"
     if TECH and sb["music_mood"] in ("sad", "warm"):  # explainer music, not drama music
         sb["music_mood"] = "curious"
+    sb["cast"] = [c for c in sb.get("cast") or [] if isinstance(c, dict) and c.get("look")]
+    sb["locations"] = [l for l in sb.get("locations") or [] if isinstance(l, dict) and l.get("look")]
+    fix_screenplay(sb, idea)
     for s in sb["scenes"]:
         try:
             secs = float(s.get("seconds", 4.5))
@@ -897,16 +1062,16 @@ def storyboard(genre: str, idea: str) -> dict:
         s["seconds"] = max(3.0, min(10.0 if FILM else 7.0, secs))
         if s.get("camera") not in CAMERA_MOVES:
             s["camera"] = "zoom_in"
-        s["caption"] = str(s.get("caption") or "")
+        s["caption"] = _caption(s)
+        s["image_prompt"] = str(s["image_prompt"])
         s.setdefault("query", s["image_prompt"][:40])
         if isinstance(s.get("cast"), str):
             s["cast"] = [s["cast"]]
+    time_screenplay(sb["scenes"])
     sb.setdefault("style", "cinematic film still, soft natural light, 35mm, shallow depth of field")
     if ANIMATED:
         sb["style"] = STYLE  # one channel look, whatever the storyboard answered
     sb.setdefault("characters", "")
-    sb["cast"] = [c for c in sb.get("cast") or [] if isinstance(c, dict) and c.get("look")]
-    sb["locations"] = [l for l in sb.get("locations") or [] if isinstance(l, dict) and l.get("look")]
     if sb.get("grade") not in GRADES:
         sb["grade"] = "teal_orange"
     sb.setdefault("hashtags", [])
@@ -1495,16 +1660,63 @@ CHORDS = {  # 4-chord progression per mood (original synthesized music, no copyr
 }
 
 
+AUDIO_EXT = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac"}
+
+
+def bgm_pool(mood: str) -> list[Path]:
+    """Your own tracks for this mood: music/<mood>/ first, the tracks in music/ itself only when that
+    mood has none (so a sad story never gets the upbeat track just because both are there)."""
+    def tracks(folder: Path) -> list[Path]:
+        return sorted(f for f in folder.glob("*") if f.is_file() and f.suffix.lower() in AUDIO_EXT) \
+            if folder.is_dir() else []
+    return tracks(MUSIC_DIR / mood) or tracks(MUSIC_DIR)
+
+
+def audio_seconds(track: Path) -> float:
+    """Length of a track's audio in seconds (0 if it can't be read)."""
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                              "format=duration", "-of", "csv=p=0", str(track)],
+                             capture_output=True, text=True, timeout=60).stdout.strip()
+        return float(out)
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return 0.0
+
+
+def bgm_track(track: Path, seconds: float, dest: Path) -> None:
+    """Cut one of your tracks to the video: audio only (downloaded tracks often carry cover art),
+    silence at its start skipped, looped if it is shorter than the video, levelled to one loudness
+    so every upload sounds the same, faded in and out."""
+    length = audio_seconds(track)
+    if length < 5:
+        raise ValueError("no usable audio (shorter than 5 s)")
+    # a long track doesn't always start at its intro: any point that still leaves enough music
+    start = random.uniform(0, length - seconds - 5) if length > seconds + 20 else 0.0
+    loop = ["-stream_loop", "-1"] if length - start < seconds + 1 else []
+    af = ("silenceremove=start_periods=1:start_threshold=-50dB,"  # no dead air before the first note
+          f"atrim=duration={seconds:.2f},loudnorm=I=-16:TP=-1.5:LRA=11,"
+          f"afade=t=in:d={0.3 if start == 0 else 1.2},afade=t=out:st={max(0.0, seconds - 2.5):.2f}:d=2.5,"
+          f"apad=whole_dur={seconds:.2f}")  # never shorter than the picture
+    ff(*loop, "-ss", f"{start:.2f}", "-i", str(track), "-map", "0:a:0", "-vn", "-af", af,
+       "-t", f"{seconds:.2f}", "-ar", "44100", "-ac", "2", "-c:a", "aac", "-b:a", "192k", str(dest))
+    if audio_seconds(dest) < seconds - 1.5:
+        raise ValueError("the cut came out shorter than the video")
+
+
 def make_music(mood: str, seconds: float, dest: Path) -> str:
-    """Royalty-free track from music/ if provided, else an original synthesized pad."""
-    pool = list((MUSIC_DIR / mood).glob("*.mp3")) + list(MUSIC_DIR.glob("*.mp3"))
-    fade_out = max(0.0, seconds - 2.5)
+    """Background music: one of your royalty-free tracks from music/ if there are any, else an
+    original synthesized pad. A track that can't be used is skipped, never a reason to lose the video."""
+    pool = bgm_pool(mood)
+    random.shuffle(pool)
+    for track in pool[:4]:
+        try:
+            bgm_track(track, seconds, dest)
+            return track.name
+        except (ValueError, OSError, subprocess.SubprocessError) as e:
+            print(f"  music: {track.name} can't be used ({str(e)[:120]}); trying another")
     if pool:
-        track = random.choice(pool)
-        ff("-stream_loop", "-1", "-i", str(track), "-t", f"{seconds:.2f}",
-           "-af", f"afade=t=in:d=1.5,afade=t=out:st={fade_out:.2f}:d=2.5,volume=0.8",
-           "-c:a", "aac", "-b:a", "192k", str(dest))
-        return track.name
+        print("  music: none of the tracks in music/ worked; using the built-in score")
+    fade_out = max(0.0, seconds - 2.5)
     chords = CHORDS.get(mood, CHORDS["warm"])
     bar, step = 4.0, 0.5  # 4 s per chord; arpeggio note every 0.5 s
     cycle = bar * len(chords)
@@ -1582,7 +1794,8 @@ def finish_video(sb: dict, parts: list[Path], lengths: list[float], work: Path, 
     report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
 
     final = work / "short.mp4"
-    ff("-i", str(joined), "-i", str(music), "-vf", f"ass={subs.as_posix()}" + (f":fontsdir={FONTS_DIR}" if FONTS_DIR else "") + watermark_filter(), *ENC,
+    ff("-i", str(joined), "-i", str(music), "-map", "0:v:0", "-map", "1:a:0",
+       "-vf", f"ass={subs.as_posix()}" + (f":fontsdir={FONTS_DIR}" if FONTS_DIR else "") + watermark_filter(), *ENC,
        "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(final))
     return final, total
 
