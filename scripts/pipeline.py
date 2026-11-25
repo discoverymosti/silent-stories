@@ -594,13 +594,17 @@ def pick_gemini_model(kind: str) -> str | None:
     return c[0] if c else None
 
 
-def ask_gemini(prompt: str, models: list[str] | None = None) -> str:
+def ask_gemini(prompt: str, models: list[str] | None = None, patient: bool = False) -> str:
+    """patient=True (ideas, storyboards, titles): the two best models get 5 tries with growing waits
+    when they are busy, so the video is written by the best free model, not by whichever weaker one
+    happens to answer first. Translations stay quick."""
     models = models or gemini_candidates("text")
     if not models:
         raise SystemExit("No Gemini text model available for this API key.")
     last = ""
-    for model in models:
-        for attempt in range(2):  # free backups exist, so don't sit on a busy model
+    for rank, model in enumerate(models):
+        tries = 5 if patient and rank < 2 else 2  # weaker models: free backups exist, don't sit on a busy one
+        for attempt in range(tries):
             try:
                 r = requests.post(
                     f"{GEMINI_BASE}/models/{model}:generateContent",
@@ -626,8 +630,9 @@ def ask_gemini(prompt: str, models: list[str] | None = None) -> str:
                     continue
             last = f"{r.status_code}: {r.text[:300]}"
             print(f"  {model} -> {r.status_code}, attempt {attempt + 1}")
-            if r.status_code in (500, 502, 503, 504):  # busy: one short wait, then the next model
-                time.sleep(10)
+            if r.status_code in (500, 502, 503, 504):  # busy: wait (10 s, 20 s, ... up to 40 s), then the next model
+                if attempt + 1 < tries:
+                    time.sleep(10 * (attempt + 1))
                 continue
             break  # 429: this model's free quota is used up; 400/403/404: unusable. Next model.
     raise SystemExit(f"Gemini failed on all models. Last error {last}")
@@ -703,7 +708,8 @@ def ask_openai_compatible(name: str, url: str, key: str, models: list[str], prom
 
 
 def ask_ai(prompt: str, creative: bool = True) -> str:
-    """Text from the first provider that answers with valid JSON. In the paid tier Claude writes
+    """Text from the best provider that answers with valid JSON: the strongest free Gemini model is
+    retried patiently for creative text before a weaker one is used. In the paid tier Claude writes
     the creative text (ideas, stories) first; translations always use the free models."""
     if creative and os.getenv("ANTHROPIC_API_KEY") and paid_ok():
         try:
@@ -712,7 +718,7 @@ def ask_ai(prompt: str, creative: bool = True) -> str:
             print(f"  Claude unavailable ({str(e)[:150]}); using the free models")
     if os.getenv("GEMINI_API_KEY"):
         try:
-            return ask_gemini(prompt)
+            return ask_gemini(prompt, patient=creative)
         except SystemExit as e:
             print(f"  Gemini unavailable ({str(e)[:120]}); trying free backups")
     for name, url, key, models in text_providers():
