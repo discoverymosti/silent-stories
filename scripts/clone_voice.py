@@ -39,18 +39,35 @@ def main() -> int:
     lines = json.loads(lines_file.read_text(encoding="utf-8"))
     out.mkdir(parents=True, exist_ok=True)
 
+    # how the voice is spoken (repository variables, so they can be tuned by ear without a code change):
+    #   VOICE_CFG          0-1, higher keeps closer to the sample's own way of speaking
+    #   VOICE_EXAGGERATION 0.25-1, higher is more expressive but less steady
+    #   VOICE_TEMPERATURE  lower is steadier and more even, higher more lively
+    # The defaults are the "4-more-expressive" setting the owner picked by ear in the voice test
+    # (the model's own defaults are 0.5 / 0.5 / 0.8).
+    def setting(name: str, default: float) -> float:
+        try:
+            return float(os.environ.get(name) or default)
+        except ValueError:
+            return default
+    cfg, exaggeration, temperature = (setting("VOICE_CFG", 0.3), setting("VOICE_EXAGGERATION", 0.75),
+                                      setting("VOICE_TEMPERATURE", 0.9))
+    print(f"  voice settings: cfg {cfg}, exaggeration {exaggeration}, temperature {temperature}")
+
     import torch
     torch.manual_seed(7)  # the same voice colour from video to video
     t0 = time.time()
     if code == "en":
         from chatterbox.tts import ChatterboxTTS
         model = ChatterboxTTS.from_pretrained(device="cpu")
-        speak = lambda text: model.generate(text, exaggeration=0.55, cfg_weight=0.5)  # noqa: E731
+        speak = lambda text: model.generate(text, exaggeration=exaggeration, cfg_weight=cfg,  # noqa: E731
+                                            temperature=temperature)
     else:
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
         model = ChatterboxMultilingualTTS.from_pretrained(device="cpu")  # the string: the package compares it to "cpu"
-        speak = lambda text: model.generate(text, language_id=code, exaggeration=0.55, cfg_weight=0.5)  # noqa: E731
-    model.prepare_conditionals(str(sample), exaggeration=0.55)  # the voice is read from the sample once
+        speak = lambda text: model.generate(text, language_id=code, exaggeration=exaggeration,  # noqa: E731
+                                            cfg_weight=cfg, temperature=temperature)
+    model.prepare_conditionals(str(sample), exaggeration=exaggeration)  # the voice is read from the sample once
     print(f"  voice model ready in {time.time() - t0:.0f} s")
 
     for n, text in enumerate(lines):

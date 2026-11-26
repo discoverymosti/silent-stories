@@ -52,7 +52,8 @@ jobs:
           SAMPLE=$(ls voice/sample.* 2>/dev/null | head -1)
           if [ -z "$SAMPLE" ]; then echo "::error::No voice sample yet: upload a 15-30 s clip of your voice as voice/sample.mp3"; exit 1; fi
           mkdir -p out
-          ffmpeg -y -loglevel error -i "$SAMPLE" -map 0:a:0 -vn -af "highpass=f=80,afftdn=nf=-28,silenceremove=start_periods=1:start_threshold=-42dB:stop_periods=-1:stop_duration=0.7:stop_threshold=-42dB,loudnorm=I=-18:TP=-2" -t 30 -ar 44100 -ac 1 out/sample.wav
+          # the sample as the pipeline prepares it: gaps closed up and levelled, no noise filter
+          ffmpeg -y -loglevel error -i "$SAMPLE" -map 0:a:0 -vn -af "highpass=f=60,silenceremove=start_periods=1:start_threshold=-42dB:stop_periods=-1:stop_duration=0.7:stop_threshold=-42dB,dynaudnorm=f=500:g=31:p=0.7" -t 30 -ar 44100 -ac 1 out/sample.wav
           python - <<'PY'
           import json, os
           builtin = {"Hindi": "किसी ने कभी नहीं पूछा कि उसे नींद क्यों नहीं आती। हर रात वह उसी ठंडे कोने में बैठता था। और बस ऐसे ही, उसे एक घर मिल गया।",
@@ -60,10 +61,19 @@ jobs:
           text = os.environ["TEXT"].strip() or builtin[os.environ["LANGUAGE"]]
           json.dump([text], open("out/lines.json", "w", encoding="utf-8"), ensure_ascii=False)
           PY
-          python scripts/clone_voice.py out/sample.wav out/lines.json out "$LANGUAGE"
-          mv out/line_00.wav out/my-cloned-voice.wav
+          mkdir -p voices
+          # the same sentence in four settings: listen and say which number sounds most like you
+          speak () {  # name cfg exaggeration temperature
+            VOICE_CFG=$2 VOICE_EXAGGERATION=$3 VOICE_TEMPERATURE=$4 python scripts/clone_voice.py out/sample.wav out/lines.json out "$LANGUAGE"
+            mv out/line_00.wav "voices/$1.wav"
+          }
+          speak 1-standard 0.5 0.5 0.8
+          speak 2-closer-to-sample 0.8 0.4 0.6
+          speak 3-calm-and-steady 0.5 0.3 0.5
+          speak 4-more-expressive 0.3 0.75 0.9
+          cp out/sample.wav voices/0-your-sample-as-the-model-hears-it.wav
       - uses: actions/upload-artifact@v7
         with:
           name: my-cloned-voice
-          path: out/my-cloned-voice.wav
+          path: voices/
           retention-days: 7
