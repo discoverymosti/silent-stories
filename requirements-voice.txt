@@ -1,0 +1,3 @@
+# Only for NARRATION=clone (your own voice, cloned from voice/sample.*). torch is installed first
+# from the CPU index by the workflow, so the runner doesn't download the GPU build.
+chatterbox-tts==0.1.7

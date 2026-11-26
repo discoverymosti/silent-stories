@@ -1,6 +1,6 @@
 # Silent Stories 🎬
 
-Automated YouTube Shorts channel. **No voice, no language barrier**: stories told as **cartoon animation** (no real or photorealistic people), short captions and music, so they work worldwide.
+Automated YouTube Shorts channel: stories told as **cartoon animation** (no real or photorealistic people), **narrated in the owner's own voice**, with short captions and music.
 
 ```
 stories.txt ─► Gemini: storyboard + SEO/SMO ─► AI cartoon images per scene (Gemini → Cloudflare FLUX → Pollinations,
@@ -95,6 +95,15 @@ What the cartoon mode changes:
 - **No real people as a fallback either:** if AI images fail, only Pixabay *animation* clips are used (Pexels is skipped, it has no animation filter).
 - The TECH channel follows the same variable; set `TECH_VISUAL_STYLE` to give it a different look.
 
+## Narration in your own voice
+YouTube's *reused content* review looks for original commentary, so videos are no longer silent: each one has a narration written as storytelling (not a description of the pictures) and spoken in **your voice**.
+- **Hindi and English:** the main (entertainment) channel is narrated in Hindi, the TECH channel in English (`NARRATION_LANGUAGE`, `TECH_NARRATION_LANGUAGE`). On-screen captions, titles and descriptions stay in English, with the translated titles as before.
+- **One clip, every video:** upload 15-30 seconds of your voice once as `voice/sample.mp3` (see `voice/README.md`). AI then speaks every narration in that voice, each picture changes exactly when its sentence starts, and the music drops under the voice. Hear it first with the **Test my cloned voice** workflow.
+- **No sample, no upload:** until the sample is there, or if the voice can't be made in a run, nothing is published (the story stays queued). `NARRATION=off` brings back the silent videos.
+- **Or really record it:** `NARRATION=record` writes a script per upcoming video into `voice/<story>/script.md`; you upload your reading into that folder and the video is timed to it. A real recording is the strongest proof of original work for YouTube's reviewers.
+- The weekly film's teaser Short is skipped while narration is on (it reused the film's pictures without a voice).
+- A narrated channel does not get approved automatically: fewer, better videos and removing the most template-like old uploads matter too.
+
 ## Growth features
 - **8 languages:** each upload carries its title and description in Spanish, Portuguese, Hindi, Indonesian, Arabic, French, German and Japanese (YouTube localizations). Viewers see them in their own language; the videos have no speech, so this removes the last language barrier. Change the list with the `YT_LANGUAGES` variable (e.g. `es,pt,hi`), empty = English only.
 - **Loop-friendly Shorts:** the first frame is the hook image (no fade from black) and the Short ends on its last image with the closing line, not a black card, so replays loop smoothly. The final shot echoes the first.
@@ -102,13 +111,14 @@ What the cartoon mode changes:
 - **Right category:** every main-channel video uploads as *Entertainment*, every Discovery Mosti TECH video as *Science & Technology* (override with `YT_CATEGORY`).
 - **No abstract filler when a few images are missing:** a missing shot is rebuilt from the nearest real image as a punch-in on another part of the frame with its own camera move (at most about a quarter of the shots); only beyond that does the quality check count filler.
 - **Self-repairing storyboards:** an incomplete AI answer is repaired or asked for again instead of failing the run.
+- **Screenplay first, then checked:** the AI writes a logline and a beat-by-beat screenplay before the shots, with captions that add to the picture instead of describing it. The result is checked in code (caption length, a caption on the hook, silent beats, repeated captions, shots that all look alike, running time); when rules are broken the AI rewrites the scenes once, and scene lengths are adjusted so the video fits its running time and every caption stays up long enough to read. The Actions log shows it as *screenplay check*.
 
 ## Watermark
 Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on Shorts, clear of the Shorts buttons; bottom-right on films). Change it with the `WATERMARK` variable (empty = none). For YouTube's clickable *subscribe* watermark, also upload your logo in YouTube Studio → Customisation → Branding → Video watermark.
 
 ## Daily use
 - **Ideas refill themselves:** when `stories.txt` drops below 5 ideas (or `films.txt` below 2), the AI adds fresh original ones that don't repeat past videos. You can still **add your own** (`genre | idea`), editing on github.com works fine. Each upload removes the top line and logs the link in `done.txt`.
-- **Better music:** drop royalty-free mp3s in `music/` (see `music/README.md`). Without them, a generated ambient pad is used.
+- **Better music (BGM):** drop royalty-free tracks in `music/` (see `music/README.md`). Each video gets one that fits its mood, cut to length, looped if it is short and levelled to the same loudness. A track that can't be read is skipped. Without any, a generated ambient pad is used.
 - **Title + thumbnail checked together:** before upload, the title and the thumbnail text are checked as one pairing (title under 60 characters with the subject up front for phones, no shouting or vague hype words, thumbnail 2-4 words that add to the title instead of repeating it). If something is off, the AI rewrites them once. Rules adapted from [youtube-agent-skill](https://github.com/Jakeschincariol/youtube-agent-skill) (MIT).
 - **Free teaser Short from every weekly film:** right after the film is up, the same run cuts a 25-40 s vertical teaser from the film's own pictures (no new images): a new hook and new captions, the whole picture sharp over a blurred copy, original music, and a link to the full film. It appears in `done.txt` as `teaser` and never uses up a Short window.
 - **Never misses, never doubles:** GitHub can delay or drop scheduled runs when it is busy (this repo has seen 3.5 h delays and skipped slots), so every publishing window gets 5-6 tries an hour apart. Each try first runs `scripts/due.py`, which reads `done.txt` in seconds: the first try that gets through makes the video, the others see it is up and stop. Exactly one video per window:
