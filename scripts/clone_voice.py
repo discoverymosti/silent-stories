@@ -42,7 +42,7 @@ def main() -> int:
         speak = lambda text: model.generate(text, exaggeration=0.55, cfg_weight=0.5)  # noqa: E731
     else:
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
-        model = ChatterboxMultilingualTTS.from_pretrained(device=torch.device("cpu"))
+        model = ChatterboxMultilingualTTS.from_pretrained(device="cpu")  # the string: the package compares it to "cpu"
         speak = lambda text: model.generate(text, language_id=code, exaggeration=0.55, cfg_weight=0.5)  # noqa: E731
     model.prepare_conditionals(str(sample), exaggeration=0.55)  # the voice is read from the sample once
     print(f"  voice model ready in {time.time() - t0:.0f} s")
