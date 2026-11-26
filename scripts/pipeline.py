@@ -1987,6 +1987,7 @@ def speak_lines(lines: list[str], sample: Path, out: Path) -> None:
     (out / "lines.json").write_text(json.dumps(lines, ensure_ascii=False), encoding="utf-8")
     subprocess.run([sys.executable, str(Path(__file__).with_name("clone_voice.py")), str(sample),
                     str(out / "lines.json"), str(out), NARRATION_LANGUAGE], check=True, timeout=5400)
+    # (VOICE_CFG, VOICE_EXAGGERATION and VOICE_TEMPERATURE reach the script through the environment)
 
 
 def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
@@ -1997,18 +1998,19 @@ def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     clean = out / "sample.wav"  # mono, at most 30 s, rumble and hiss reduced: what the model listens to
     ff("-i", str(sample), "-map", "0:a:0", "-vn", "-af",
-       "highpass=f=80,afftdn=nf=-28,silenceremove=start_periods=1:start_threshold=-42dB:"
-       "stop_periods=-1:stop_duration=0.7:stop_threshold=-42dB,loudnorm=I=-18:TP=-2",  # long gaps closed up
+       # only gaps and level are touched: any noise filter here changes the voice the model learns
+       "highpass=f=60,silenceremove=start_periods=1:start_threshold=-42dB:"
+       "stop_periods=-1:stop_duration=0.7:stop_threshold=-42dB,dynaudnorm=f=500:g=31:p=0.7",
        "-t", "30", "-ar", "44100", "-ac", "1", str(clean))
     if audio_seconds(clean) < 6:
         raise ValueError(f"the voice sample {sample.name} has under 6 seconds of speech; 15-30 seconds work best")
     scenes = sb["scenes"]
     speak_lines([s["narration"] for s in scenes], clean, out)
     trim = "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.03"
-    # every take: hiss and rumble reduced, silence cut off both ends, and long pauses inside the
-    # line shortened to a natural breath
-    clean_take = (f"highpass=f=70,afftdn=nf=-30,{trim},areverse,{trim},areverse,"
-                  "silenceremove=stop_periods=-1:stop_duration=0.3:stop_threshold=-45dB")  # pauses: 0.3 s at most
+    # every take: silence cut off both ends and long pauses inside the line shortened to a natural
+    # breath. No noise filter: spectral denoising made the cloned voice sound metallic and robotic.
+    clean_take = (f"highpass=f=60,{trim},areverse,{trim},areverse,"
+                  "silenceremove=stop_periods=-1:stop_duration=0.35:stop_threshold=-50dB")  # pauses: 0.35 s at most
     pre, post, takes = 0.05, 0.2, {}
     for i, s in enumerate(scenes):
         if s["narration"]:
@@ -2016,10 +2018,10 @@ def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
             ff("-i", str(out / f"line_{i:02d}.wav"), "-af", clean_take, "-ar", "44100", "-ac", "1", str(takes[i]))
             if audio_seconds(takes[i]) < 0.4:
                 raise ValueError(f"line {i + 1} came out empty")
-    # fit the whole narration into the planned running time: a slightly brisker delivery (same pitch)
-    # when the takes run long, never more than 18% faster
+    # fit the narration into the planned running time: a slightly brisker delivery (same pitch) when
+    # the takes run long, never more than 7% faster (more than that stops sounding like the owner)
     raw = sum(audio_seconds(t) + pre + post for t in takes.values()) + 2.5 * (len(scenes) - len(takes))
-    tempo = min(1.18, max(1.0, raw / VOICE_SECONDS))
+    tempo = min(1.07, max(1.0, raw / VOICE_SECONDS))
     if tempo > 1.02:
         print(f"  voice: the takes add up to {raw:.0f} s; spoken {round((tempo - 1) * 100)}% brisker to fit")
     pieces = []
