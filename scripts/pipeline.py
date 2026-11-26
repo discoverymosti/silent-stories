@@ -618,6 +618,10 @@ NARRATION_RULES = """NARRATION RULES (the channel's owner reads the narration al
 
 # what the code checks after the AI answers (same numbers as the rules in the prompts)
 SCENES_OK, TOTAL_OK, CAPTION_WORDS = ((16, 26), (150.0, 190.0), 8) if FILM else ((8, 12), (45.0, 55.0), 7)
+# narrated videos: how long the voice track may be (a Short then ends at about 50 s with its closing
+# line), and the words that fit into it at a storytelling pace
+VOICE_SECONDS = 172.0 if FILM else 46.0
+NARRATION_WORDS = (int(VOICE_SECONDS * 1.9), int(VOICE_SECONDS * 2.2))
 
 SCREENPLAY_FIX_PROMPT = """You are the script editor of "{channel}", a channel of SILENT videos (no voice;
 pictures, very short captions and music). Rewrite the scenes of this screenplay so that every
@@ -917,6 +921,10 @@ def screenplay_problems(sb: dict) -> list[str]:
             and a.get("location") == b.get("location")]
     if len(same) > (1 if FILM else 0) + len(scenes) // 6:  # a couple are fine, a row of them is a slideshow
         out.append(f"scenes {', '.join(same)} share the same shot size and location; vary the shots")
+    spoken = sum(len(str(s.get("narration") or "").split()) for s in scenes) if VOICED else 0
+    if spoken > NARRATION_WORDS[1] * 1.1:
+        out.append(f"the narration has {spoken} words, too long to say in {VOICE_SECONDS:.0f} seconds; "
+                   f"cut it to {NARRATION_WORDS[0]}-{NARRATION_WORDS[1]} words in all, keeping every scene's line")
     cast = {c.get("id") for c in sb.get("cast") or [] if isinstance(c, dict)}
     places = {l.get("id") for l in sb.get("locations") or [] if isinstance(l, dict)}
     bad = [str(i + 1) for i, s in enumerate(scenes)
@@ -1106,8 +1114,9 @@ def storyboard(genre: str, idea: str) -> dict:
     if VOICED:
         lo, hi = TOTAL_OK
         prompt = narrated(prompt).replace("VISUAL RULES", NARRATION_RULES.format(
-            lang=NARRATION_LANGUAGE, per_scene="12-30" if FILM else "8-18", wps=WORDS_PER_SECOND,
-            total=f"{int(lo * WORDS_PER_SECOND * 0.9)}-{int(hi * WORDS_PER_SECOND * 0.95)}",
+            lang=NARRATION_LANGUAGE, per_scene="10-22" if FILM else "7-13", wps=WORDS_PER_SECOND,
+            total=f"{NARRATION_WORDS[0]}-{NARRATION_WORDS[1]} (never more: the video must stay "
+                  f"{'under ' + str(int(hi)) if FILM else 'around 50'} seconds)",
             piece="explanation" if TECH else "story") + "\nVISUAL RULES", 1).replace(
             '"query": str, "caption": str, "seconds": number}]}', '"query": str, "caption": str, "narration": str, "seconds": number}]}')
     for attempt in range(2):  # an incomplete storyboard gets one fresh try
@@ -1951,21 +1960,35 @@ def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
     scenes = sb["scenes"]
     speak_lines([s["narration"] for s in scenes], clean, out)
     trim = "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.03"
-    pre, post, pieces = 0.15, 0.35, []
+    # every take: hiss and rumble reduced, silence cut off both ends, and long pauses inside the
+    # line shortened to a natural breath
+    clean_take = (f"highpass=f=70,afftdn=nf=-30,{trim},areverse,{trim},areverse,"
+                  "silenceremove=stop_periods=-1:stop_duration=0.3:stop_threshold=-45dB")  # pauses: 0.3 s at most
+    pre, post, takes = 0.05, 0.2, {}
     for i, s in enumerate(scenes):
-        piece, spoken = out / f"scene_{i:02d}.wav", 0.0
         if s["narration"]:
-            take = out / f"take_{i:02d}.wav"
-            ff("-i", str(out / f"line_{i:02d}.wav"), "-af", f"{trim},areverse,{trim},areverse",
-               "-ar", "44100", "-ac", "1", str(take))
-            spoken = audio_seconds(take)
-            if spoken < 0.4:
+            takes[i] = out / f"take_{i:02d}.wav"
+            ff("-i", str(out / f"line_{i:02d}.wav"), "-af", clean_take, "-ar", "44100", "-ac", "1", str(takes[i]))
+            if audio_seconds(takes[i]) < 0.4:
                 raise ValueError(f"line {i + 1} came out empty")
-            s["seconds"] = round(max(2.0, pre + spoken + post), 2)
-            ff("-i", str(take), "-af", f"adelay={int(pre * 1000)},apad=whole_dur={s['seconds']:.2f}",
-               "-t", f"{s['seconds']:.2f}", str(piece))
+    # fit the whole narration into the planned running time: a slightly brisker delivery (same pitch)
+    # when the takes run long, never more than 18% faster
+    raw = sum(audio_seconds(t) + pre + post for t in takes.values()) + 2.5 * (len(scenes) - len(takes))
+    tempo = min(1.18, max(1.0, raw / VOICE_SECONDS))
+    if tempo > 1.02:
+        print(f"  voice: the takes add up to {raw:.0f} s; spoken {round((tempo - 1) * 100)}% brisker to fit")
+    pieces = []
+    for i, s in enumerate(scenes):
+        piece = out / f"scene_{i:02d}.wav"
+        if i in takes:
+            spoken = audio_seconds(takes[i]) / (tempo if tempo > 1.02 else 1.0)
+            s["seconds"] = round(max(1.8, pre + spoken + post), 2)
+            fx = (f"atempo={tempo:.3f}," if tempo > 1.02 else "") + (
+                f"afade=t=in:d=0.02,afade=t=out:st={max(0.0, spoken - 0.05):.2f}:d=0.05,"
+                f"adelay={int(pre * 1000)},apad=whole_dur={s['seconds']:.2f}")
+            ff("-i", str(takes[i]), "-af", fx, "-t", f"{s['seconds']:.2f}", str(piece))
         else:  # a scene without a line: a short beat of music only
-            s["seconds"] = round(min(s["seconds"], 3.0), 2)
+            s["seconds"] = round(min(s["seconds"], 2.5), 2)
             ff("-f", "lavfi", "-t", f"{s['seconds']:.2f}", "-i", "anullsrc=r=44100:cl=mono", str(piece))
         pieces.append(piece)
     scenes[0]["seconds"] = round(scenes[0]["seconds"] + VOICE_LEAD, 2)  # the voice track starts VOICE_LEAD in
