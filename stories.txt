@@ -2,7 +2,6 @@
 # genres: story (emotional micro-drama), explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-story | A night-shift street sweeper finds a muddy teddy bear in the gutter, carefully washes it at a fountain, and leaves it under a lamppost where a searching mother discovers it at dawn.
 story | A stray kitten curls up inside a blind street violinist's open case every night, drawing mesmerized crowds who fill the case with coins to avoid waking the sleeping cat.
 story | A movie projectionist at an open-air cinema notices a stray puppy watching the light from a dark alley, so he angles a small mirror to project a miniature film screen down to the puppy's corner.
 explainer | How Raku pottery is crafted: red-hot ceramic vessels are pulled straight from a roaring furnace and buried in sawdust, creating brilliant metallic glazes through rapid oxygen reduction.
