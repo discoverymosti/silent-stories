@@ -40,16 +40,18 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     # how the voice is spoken (repository variables, so they can be tuned by ear without a code change):
-    #   VOICE_CFG          0-1, higher keeps closer to the sample's own way of speaking (default 0.5)
-    #   VOICE_EXAGGERATION 0.25-1, higher is more expressive but less steady (default 0.5)
-    #   VOICE_TEMPERATURE  lower is steadier and more even, higher more lively (default 0.8)
+    #   VOICE_CFG          0-1, higher keeps closer to the sample's own way of speaking
+    #   VOICE_EXAGGERATION 0.25-1, higher is more expressive but less steady
+    #   VOICE_TEMPERATURE  lower is steadier and more even, higher more lively
+    # The defaults are the "4-more-expressive" setting the owner picked by ear in the voice test
+    # (the model's own defaults are 0.5 / 0.5 / 0.8).
     def setting(name: str, default: float) -> float:
         try:
             return float(os.environ.get(name) or default)
         except ValueError:
             return default
-    cfg, exaggeration, temperature = (setting("VOICE_CFG", 0.5), setting("VOICE_EXAGGERATION", 0.5),
-                                      setting("VOICE_TEMPERATURE", 0.8))
+    cfg, exaggeration, temperature = (setting("VOICE_CFG", 0.3), setting("VOICE_EXAGGERATION", 0.75),
+                                      setting("VOICE_TEMPERATURE", 0.9))
     print(f"  voice settings: cfg {cfg}, exaggeration {exaggeration}, temperature {temperature}")
 
     import torch

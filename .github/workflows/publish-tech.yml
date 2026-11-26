@@ -152,7 +152,7 @@ jobs:
           # the TECH channel is narrated in English, the main (entertainment) channel in Hindi
           NARRATION_LANGUAGE: ${{ vars.TECH_NARRATION_LANGUAGE || 'English' }}
           VOICE_AHEAD: ${{ vars.VOICE_AHEAD || '3' }}
-          # how the cloned voice speaks (empty = the model's defaults); compare by ear with 'Test my cloned voice'
+          # how the cloned voice speaks (empty = the owner's chosen 'more expressive' setting); compare by ear with 'Test my cloned voice'
           VOICE_CFG: ${{ vars.VOICE_CFG }}
           VOICE_EXAGGERATION: ${{ vars.VOICE_EXAGGERATION }}
           VOICE_TEMPERATURE: ${{ vars.VOICE_TEMPERATURE }}
