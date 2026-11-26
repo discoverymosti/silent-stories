@@ -44,7 +44,7 @@ jobs:
           SAMPLE=$(ls voice/sample.* 2>/dev/null | head -1)
           if [ -z "$SAMPLE" ]; then echo "::error::No voice sample yet: upload a 15-30 s clip of your voice as voice/sample.mp3"; exit 1; fi
           mkdir -p out
-          ffmpeg -y -loglevel error -i "$SAMPLE" -map 0:a:0 -vn -af "highpass=f=80,afftdn=nf=-28,loudnorm=I=-18:TP=-2" -t 30 -ar 44100 -ac 1 out/sample.wav
+          ffmpeg -y -loglevel error -i "$SAMPLE" -map 0:a:0 -vn -af "highpass=f=80,afftdn=nf=-28,silenceremove=start_periods=1:start_threshold=-42dB:stop_periods=-1:stop_duration=0.7:stop_threshold=-42dB,loudnorm=I=-18:TP=-2" -t 30 -ar 44100 -ac 1 out/sample.wav
           python - <<'PY'
           import json, os
           builtin = {"Hindi": "किसी ने कभी नहीं पूछा कि उसे नींद क्यों नहीं आती। हर रात वह उसी ठंडे कोने में बैठता था। और बस ऐसे ही, उसे एक घर मिल गया।",

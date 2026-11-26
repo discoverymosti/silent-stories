@@ -1943,7 +1943,8 @@ def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     clean = out / "sample.wav"  # mono, at most 30 s, rumble and hiss reduced: what the model listens to
     ff("-i", str(sample), "-map", "0:a:0", "-vn", "-af",
-       "highpass=f=80,afftdn=nf=-28,silenceremove=start_periods=1:start_threshold=-42dB,loudnorm=I=-18:TP=-2",
+       "highpass=f=80,afftdn=nf=-28,silenceremove=start_periods=1:start_threshold=-42dB:"
+       "stop_periods=-1:stop_duration=0.7:stop_threshold=-42dB,loudnorm=I=-18:TP=-2",  # long gaps closed up
        "-t", "30", "-ar", "44100", "-ac", "1", str(clean))
     if audio_seconds(clean) < 6:
         raise ValueError(f"the voice sample {sample.name} has under 6 seconds of speech; 15-30 seconds work best")
