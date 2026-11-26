@@ -190,6 +190,22 @@ def uploaded_within(hours: float) -> bool:
     return False
 
 
+# Main (entertainment) channel: every kind of story, not only tear-jerkers. genre -> what it should feel like
+STORY_GENRES = {
+    "comedy": "a funny situation that keeps escalating, visual gags, a punchline twist at the end; light and playful",
+    "mystery": "something strange happens, clues appear one by one, and the last scenes reveal a surprising answer",
+    "thriller": "danger and a race against time, rising tension, a narrow escape or a sharp twist; no gore",
+    "adventure": "a journey or quest: a bold goal, obstacles on the way, a triumphant discovery",
+    "fantasy": "magic, myth or talking creatures in an imaginative world with one clear magical rule",
+    "sci-fi": "robots, space or future technology, built around one clever what-if idea",
+    "spooky": "an eerie ghost-story mood with a twist; creepy but family-friendly, no gore or violence",
+    "moral": "a folk-tale style fable: a choice, its consequence and a clear lesson anyone can retell",
+    "motivational": "someone fails, keeps going against the odds and wins; the viewer leaves inspired",
+    "emotional": "a tender micro-drama about kindness, love or loss",
+}
+GENRE_MIX = ("comedy, mystery, thriller, adventure, fantasy, sci-fi, spooky (family-friendly), moral (a fable with "
+             "a lesson), motivational and emotional")
+
 REFILL_PROMPT = """You plan content for "{channel}", a worldwide YouTube channel of SILENT stories:
 no voiceover, no dialogue, only {images}, short captions and music.
 {learn}Write {n} NEW, original {kind} ideas for a global audience (any country; universal emotions).
@@ -326,6 +342,19 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
             '(a practical phone/PC/app/AI tip anyone can try), a fifth "list" (a numbered countdown of 4-6 '
             'items, e.g. free apps that replace paid ones, with the money or time saved) and the rest "product" '
             '(what a kind of product or a well-known launch does and why it matters). Only facts you are sure of.')
+    else:  # entertainment channel: all kinds of stories, never a queue of look-alike tear-jerkers
+        prompt = prompt.replace(
+            'Mix genres: about half "story" (emotional micro-drama), a quarter "explainer" (how something '
+            'works) and a quarter "fact" (surprising true fact, must be accurate).',
+            f'"genre" is one of: {GENRE_MIX}; plus about one idea in five "explainer" (how something works) and '
+            'one in five "fact" (surprising true fact, must be accurate). Use as many different genres as '
+            'possible: no two ideas in a row share a genre and "emotional" appears at most twice.').replace(
+            'genre is always "story".', f'"genre" is one of: {GENRE_MIX}. Every idea has a different genre.').replace(
+            "Each idea: one sentence with a clear character, situation and emotional or surprising payoff.",
+            "Each idea: one sentence with a clear character, situation and a payoff that fits its genre (a laugh, "
+            "a gasp, a reveal, a win, a lesson, a tear).\nVary the heroes and settings too: children, elders, "
+            "workers, inventors, travellers, animals, robots, objects that come alive; city, village, sea, space, "
+            "past and future. At most one idea about a stray animal being rescued or befriended.")
     try:
         ideas = json.loads(_strip_fences(ask_ai(prompt)))["ideas"]
     except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
@@ -1111,6 +1140,22 @@ def storyboard(genre: str, idea: str) -> dict:
             if old not in prompt:
                 print(f"  note: tech wording not applied ({old[:40]!r} missing from the prompt)")
             prompt = prompt.replace(old, new)
+    if not TECH and genre not in ("explainer", "fact"):
+        feel = STORY_GENRES.get(genre, "pick the kind of story this idea is (" + GENRE_MIX + ") and commit to it")
+        prompt = prompt.replace(
+            '("story" = emotional micro-drama / short film, "explainer" = how something\n'
+            '                  works, "fact" = surprising true fact told visually)',
+            f"= {feel}.\n"
+            "                  Everything follows this genre: the plot, the acting in the pictures, the captions,\n"
+            '                  the narration\'s voice and the "music_mood" (comedy: curious or uplifting; mystery,\n'
+            "                  thriller, spooky: tense; adventure, motivational: uplifting; sci-fi, fantasy: curious;\n"
+            "                  moral: warm; emotional: warm or sad). Do not turn it into a sad or sentimental story\n"
+            "                  unless the genre is emotional.").replace(
+            "- Clear arc: hook -> build -> turn -> emotional payoff.",
+            "- Clear arc: hook -> build -> turn -> the payoff this genre promises (a laugh, a gasp, a reveal, "
+            "a win, a lesson, a tear).").replace(
+            "emotional curiosity", "curiosity that fits the genre").replace(
+            "-> emotional resolution.", "-> a resolution that fits the genre.")
     if VOICED:
         lo, hi = TOTAL_OK
         prompt = narrated(prompt).replace("VISUAL RULES", NARRATION_RULES.format(
