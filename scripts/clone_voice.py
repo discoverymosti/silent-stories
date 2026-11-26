@@ -12,6 +12,7 @@ Called by pipeline.py; needs requirements-voice.txt.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import wave
@@ -25,6 +26,11 @@ WORDS_PER_SECOND = 2.4
 
 
 def main() -> int:
+    # the workflow passes HF_TOKEN even when that secret is not set: an empty token makes the model
+    # download send an invalid "Bearer " header and fail. The model is public; no token is needed.
+    for var in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):
+        if not os.environ.get(var, "").strip():
+            os.environ.pop(var, None)
     sample, lines_file, out = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
     language = (sys.argv[4] if len(sys.argv) > 4 else "English").strip().lower()
     code = LANGS.get(language, language if language in LANGS.values() else "")
