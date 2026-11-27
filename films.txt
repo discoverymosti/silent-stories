@@ -1,9 +1,11 @@
 # Weekly short film queue (Sundays 16:10 UTC, ~3 min, widescreen): one idea per line as  genre | idea
-# Any genre: comedy, mystery, thriller, adventure, fantasy, sci-fi, spooky, moral, motivational, emotional.
+# Any genre: romance, drama, suspense, comedy, sci-fi, horror, mystery, thriller, adventure, fantasy, moral,
+# motivational, emotional.
 # Give each film a character with a goal, an obstacle, a turning point and a payoff. The top line is made next.
 
 mystery | A young postwoman in a hill town keeps receiving letters addressed to a house that burned down fifty years ago, and following them one by one leads her to an old man who has been waiting for an answer his whole life.
 adventure | A lighthouse keeper's grandson and a retired fisherman sail a patched-up boat through fog, a whale's path and a rocky strait to return a lost message bottle to the island it came from.
+romance | A bus conductor and a schoolteacher share the same last seat on the evening bus for a year without learning each other's names, and on the day the route is cancelled each sets out across the city to find the other.
 story | A lonely harbor master leaves a fresh fish scrap for a stray heron on the quiet pier every sunset, until one foggy evening the bird's loud warning call alerts him to a small stranded rowboat drifting helplessly toward the rocky breakwater.
 story | A master blacksmith painstakingly hand-forges a delicate iron weather vane in the shape of a flying swallow, only to be surprised when a migrating flock of real swallows perches along its wings the moment he mounts it atop the village chapel.
 story | An evening canal-boat skipper leaves a small dish of food on the deck for a stray cat at dusk, until one rainy night the feline persistently tugs at his trouser hem to draw his attention to a floating wooden crate containing three abandoned puppies.

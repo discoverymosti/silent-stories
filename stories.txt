@@ -1,15 +1,20 @@
 # Queue: one idea per line as  genre | idea
-# genres: comedy, mystery, thriller, adventure, fantasy, sci-fi, spooky, moral, motivational, emotional,
+# genres: romance (love story), drama, suspense, comedy, sci-fi, horror, mystery, thriller, adventure, fantasy,
+#         moral, motivational, emotional,
 #         explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
 comedy | A proud rooster oversleeps on the one morning the whole village is counting on him, and tries everything from a pot lid to a borrowed bicycle bell to fake his crow before anyone notices.
 mystery | Every morning one more painted pot disappears from a potter's shelf, so she dusts the floor with flour and follows the tiny footprints to a rooftop garden nobody knew existed.
+romance | A shy tea-stall boy and a girl who sells flowers across the road trade small paper notes in tea glasses and marigolds for a whole monsoon, until the day her stall is gone and he has only one unread note to find her.
+horror | A night guard at an old doll factory counts the dolls on one shelf every hour, and each time there is one fewer, until the last count, when the shelf is full again and one of the dolls is wearing his cap.
+suspense | A watch repairer notices that the stranger who left a pocket watch for mending has been standing across the street all night, and the watch is ticking down to an hour scratched inside its lid.
+drama | A proud father who sold his fields to pay for his son's studies pretends on every phone call that the harvest is fine, until the son comes home unannounced and finds him working another man's land.
 sci-fi | A small delivery robot whose battery is almost empty has to cross a flooded futuristic city to bring one birthday cake to a little girl before midnight.
 moral | A greedy shopkeeper who secretly files down his weights is handed a magic scale that weighs honesty instead of grain, and watches his own gold coins turn as light as feathers.
 thriller | A night-train driver sees the bridge signal fail in a storm and has ninety seconds, one lantern and a red scarf to stop the express coming the other way.
 fantasy | A boy who is afraid of the dark finds a tired firefly spirit in his cupboard and has to carry it back to the forest of lights before sunrise.
-spooky | A night watchman in an old clock museum notices one grandfather clock ticking backwards, and each backward chime brings a faded portrait on the wall a little more to life.
+horror | A night watchman in an old clock museum notices one grandfather clock ticking backwards, and each backward chime brings a faded portrait on the wall a little more to life.
 motivational | A girl with a patched-up bicycle loses the village race year after year, trains every dawn on the steepest hill, and finally crosses the line first with a broken chain in her hand.
 adventure | Two siblings follow a map drawn on the back of their grandfather's old kite across a river, a market and a monkey-filled temple ruin to find what he hid as a boy.
 story | A stray kitten curls up inside a blind street violinist's open case every night, drawing mesmerized crowds who fill the case with coins to avoid waking the sleeping cat.

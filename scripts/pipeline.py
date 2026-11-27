@@ -198,13 +198,24 @@ STORY_GENRES = {
     "adventure": "a journey or quest: a bold goal, obstacles on the way, a triumphant discovery",
     "fantasy": "magic, myth or talking creatures in an imaginative world with one clear magical rule",
     "sci-fi": "robots, space or future technology, built around one clever what-if idea",
-    "spooky": "an eerie ghost-story mood with a twist; creepy but family-friendly, no gore or violence",
+    "romance": "a love story: two people (or two unlikely hearts) meet, something keeps them apart, one brave "
+               "or tender gesture brings them together; sweet and clean, shown through looks and small acts",
+    "drama": "a serious human story about family, friendship, duty or a hard choice, with real stakes and a "
+             "turning point that changes the character",
+    "suspense": "the viewer knows or fears something the character does not; every scene tightens the wait "
+                "until a last-second reveal",
+    "horror": "a scary story: dread that builds, something wrong in the dark, a chilling twist in the last "
+              "scene; fear through shadows, sound and suggestion, never blood, gore or graphic violence",
     "moral": "a folk-tale style fable: a choice, its consequence and a clear lesson anyone can retell",
     "motivational": "someone fails, keeps going against the odds and wins; the viewer leaves inspired",
     "emotional": "a tender micro-drama about kindness, love or loss",
 }
-GENRE_MIX = ("comedy, mystery, thriller, adventure, fantasy, sci-fi, spooky (family-friendly), moral (a fable with "
-             "a lesson), motivational and emotional")
+GENRE_MIX = ("romance (a love story), drama, suspense, comedy, sci-fi, horror (scary, never gory), mystery, thriller, "
+             "adventure, fantasy, moral (a fable with a lesson), motivational and emotional")
+# other ways the owner or the AI may write a genre in the queue
+GENRE_ALIASES = {"love story": "romance", "love": "romance", "romantic": "romance", "scifi": "sci-fi", "sifi": "sci-fi",
+                 "science fiction": "sci-fi", "spooky": "horror", "scary": "horror", "ghost": "horror",
+                 "funny": "comedy", "inspirational": "motivational", "fable": "moral", "sad": "emotional"}
 
 REFILL_PROMPT = """You plan content for "{channel}", a worldwide YouTube channel of SILENT stories:
 no voiceover, no dialogue, only {images}, short captions and music.
@@ -1141,6 +1152,7 @@ def storyboard(genre: str, idea: str) -> dict:
                 print(f"  note: tech wording not applied ({old[:40]!r} missing from the prompt)")
             prompt = prompt.replace(old, new)
     if not TECH and genre not in ("explainer", "fact"):
+        genre = GENRE_ALIASES.get(genre, genre)
         feel = STORY_GENRES.get(genre, "pick the kind of story this idea is (" + GENRE_MIX + ") and commit to it")
         prompt = prompt.replace(
             '("story" = emotional micro-drama / short film, "explainer" = how something\n'
@@ -1148,8 +1160,8 @@ def storyboard(genre: str, idea: str) -> dict:
             f"= {feel}.\n"
             "                  Everything follows this genre: the plot, the acting in the pictures, the captions,\n"
             '                  the narration\'s voice and the "music_mood" (comedy: curious or uplifting; mystery,\n'
-            "                  thriller, spooky: tense; adventure, motivational: uplifting; sci-fi, fantasy: curious;\n"
-            "                  moral: warm; emotional: warm or sad). Do not turn it into a sad or sentimental story\n"
+            "                  thriller, suspense, horror: tense; adventure, motivational: uplifting; sci-fi, fantasy:\n"
+            "                  curious; romance, moral: warm; drama, emotional: warm or sad). Do not turn it into a sad or sentimental story\n"
             "                  unless the genre is emotional.").replace(
             "- Clear arc: hook -> build -> turn -> emotional payoff.",
             "- Clear arc: hook -> build -> turn -> the payoff this genre promises (a laugh, a gasp, a reveal, "
