@@ -106,6 +106,13 @@ VOICED = NARRATION != "off" and not TEASER
 RECORDED = VOICED and NARRATION != "clone"
 NARRATION_LANGUAGE = (os.getenv("NARRATION_LANGUAGE") or "English").strip()
 VOICE_DIR = CH_DIR / "voice"
+# Character voices (entertainment channel, cloned narration only): a few short lines per video are spoken
+# by the characters themselves in other AI voices, human or cartoon-like; the owner stays the narrator.
+#   CHARACTER_VOICES=off turns them off. A clip in voice/characters/<kind>.mp3 (e.g. woman.mp3) is used as
+#   that character's voice; without one the model's own stock voice is tuned to the pitch below (Hz).
+CHARACTERS = VOICED and NARRATION == "clone" and not TECH and (os.getenv("CHARACTER_VOICES") or "on").strip().lower() != "off"
+CHARACTER_PITCH = {"man": 115, "woman": 205, "boy": 255, "girl": 285, "old_man": 100, "old_woman": 185,
+                   "creature": 330, "giant": 82}
 VOICE_AHEAD = max(1, int(os.getenv("VOICE_AHEAD") or 3))  # scripts kept ready, so several can be recorded in one go
 VOICE_LEAD = 0.3  # seconds of picture before the first word
 WORDS_PER_SECOND = 2.4  # calm storytelling pace
@@ -640,6 +647,17 @@ SCREENPLAY_RULES_TECH = """SCREENPLAY RULES (write the screenplay first, then sh
 - A caption needs time to be read: about 1.5 seconds plus half a second per word.
 """
 
+DIALOGUE_RULES = """CHARACTER VOICE RULES (the narrator tells the story; now and then a character speaks for itself)
+- 2 or 3 scenes, never more, also have a "dialogue": one short line (3-8 words, in {lang}, same script as the
+  narration) that a character visible in that scene says out loud, at the moment it matters most: a cry,
+  a joke, a plea, the punchline, the reveal. All other scenes have "dialogue": "".
+- "dialogue_voice": who is speaking, exactly one of: man, woman, boy, girl, old_man, old_woman,
+  creature (a small animal, robot or magical being), giant (a big beast, monster or deep-voiced being).
+- The narration of that scene leads into the line and does not repeat it ("And then the rooster said..."
+  is followed by the rooster's own words in "dialogue"). The line is spoken right after the narration.
+- Dialogue words count toward the narration's total.
+"""
+
 NARRATION_RULES = """NARRATION RULES (the channel's owner reads the narration aloud in their own voice; it is the heart of the video)
 - Every scene has a "narration": what the narrator SAYS while that picture is on screen, written in
   {lang} (in that language's own script, e.g. Devanagari for Hindi, in the everyday words people
@@ -961,7 +979,7 @@ def screenplay_problems(sb: dict) -> list[str]:
             and a.get("location") == b.get("location")]
     if len(same) > (1 if FILM else 0) + len(scenes) // 6:  # a couple are fine, a row of them is a slideshow
         out.append(f"scenes {', '.join(same)} share the same shot size and location; vary the shots")
-    spoken = sum(len(str(s.get("narration") or "").split()) for s in scenes) if VOICED else 0
+    spoken = sum(len(f"{s.get('narration') or ''} {s.get('dialogue') or ''}".split()) for s in scenes) if VOICED else 0
     if spoken > NARRATION_WORDS[1] * 1.1:
         out.append(f"the narration has {spoken} words, too long to say in {VOICE_SECONDS:.0f} seconds; "
                    f"cut it to {NARRATION_WORDS[0]}-{NARRATION_WORDS[1]} words in all, keeping every scene's line")
@@ -986,7 +1004,7 @@ def fix_screenplay(sb: dict, idea: str) -> None:
         return
     print(f"  screenplay check: {'; '.join(x[:160] for x in problems)}")
     keys = ("shot", "image_prompt", "cast", "location", "lighting", "camera", "query", "caption", "seconds") \
-        + (("narration",) if VOICED else ())
+        + (("narration",) if VOICED else ()) + (("dialogue", "dialogue_voice") if CHARACTERS else ())
     try:
         fix = json.loads(_strip_fences(ask_ai(SCREENPLAY_FIX_PROMPT.format(
             channel=CHANNEL_NAME, idea=idea, problems="\n".join(f"- {x}" for x in problems),
@@ -1175,7 +1193,10 @@ def storyboard(genre: str, idea: str) -> dict:
             total=f"{NARRATION_WORDS[0]}-{NARRATION_WORDS[1]} (never more: the video must stay "
                   f"{'under ' + str(int(hi)) if FILM else 'around 50'} seconds)",
             piece="explanation" if TECH else "story") + "\nVISUAL RULES", 1).replace(
-            '"query": str, "caption": str, "seconds": number}]}', '"query": str, "caption": str, "narration": str, "seconds": number}]}')
+            '"query": str, "caption": str, "seconds": number}]}', '"query": str, "caption": str, "narration": str, '
+            + ('"dialogue": str, "dialogue_voice": str, ' if CHARACTERS else "") + '"seconds": number}]}')
+        if CHARACTERS:
+            prompt = prompt.replace("VISUAL RULES", DIALOGUE_RULES.format(lang=NARRATION_LANGUAGE) + "\nVISUAL RULES", 1)
     for attempt in range(2):  # an incomplete storyboard gets one fresh try
         try:
             sb = json.loads(_strip_fences(ask_ai(prompt)))
@@ -1211,10 +1232,16 @@ def storyboard(genre: str, idea: str) -> dict:
             s["camera"] = "zoom_in"
         s["caption"] = _caption(s)
         s["narration"] = " ".join(str(s.get("narration") or "").split()) if VOICED else ""
+        s["dialogue"] = " ".join(str(s.get("dialogue") or "").split()) if CHARACTERS and s["narration"] else ""
+        s["dialogue_voice"] = str(s.get("dialogue_voice") or "").strip().lower().replace(" ", "_") if s["dialogue"] else ""
+        if s["dialogue"] and s["dialogue_voice"] not in CHARACTER_PITCH:
+            s["dialogue_voice"] = "man"
         s["image_prompt"] = str(s["image_prompt"])
         s.setdefault("query", s["image_prompt"][:40])
         if isinstance(s.get("cast"), str):
             s["cast"] = [s["cast"]]
+    for extra in [s for s in sb["scenes"] if s["dialogue"]][3:]:  # a few lines, not a radio play
+        extra["dialogue"] = extra["dialogue_voice"] = ""
     time_screenplay(sb["scenes"])
     if VOICED and sum(1 for s in sb["scenes"] if s["narration"]) < len(sb["scenes"]) * 0.7:
         raise SystemExit("Storyboard has no usable narration (the AI left most scenes without a line).")
@@ -1994,8 +2021,29 @@ def voice_sample() -> Path | None:
     return None
 
 
-def speak_lines(lines: list[str], sample: Path, out: Path) -> None:
-    """Every line spoken in the sample's voice: out/line_NN.wav (scripts/clone_voice.py)."""
+def character_ref(kind: str) -> str:
+    """A clip the owner provided for this kind of character (voice/characters/<kind>.*), else ""."""
+    for folder in dict.fromkeys([VOICE_DIR / "characters", ROOT / "voice" / "characters"]):
+        files = sorted(f for f in folder.glob(f"{kind}.*") if f.is_file() and f.suffix.lower() in VOICE_EXT)
+        if files:
+            return str(files[0])
+    return ""
+
+
+def character_take(raw: Path, kind: str, pitch: float | None, ref: str, dest: Path, trim: str) -> None:
+    """A character's line, cleaned like the narrator's; the stock voice is moved to the pitch of the
+    kind of character (higher and smaller for a child or creature, lower and bigger for a giant)."""
+    factor = 1.0
+    if not ref and pitch:
+        factor = max(0.72, min(1.7, CHARACTER_PITCH[kind] / pitch))
+    shift = f"asetrate={44100 * factor:.0f},aresample=44100,atempo={1 / factor:.4f}," if abs(factor - 1) > 0.04 else ""
+    ff("-i", str(raw), "-af", f"aresample=44100,{shift}highpass=f=60,{trim},areverse,{trim},areverse",
+       "-ar", "44100", "-ac", "1", str(dest))
+
+
+def speak_lines(lines: list, sample: Path, out: Path) -> None:
+    """Every line spoken: the owner's cloned voice, or a character voice for {"voice": kind} items.
+    Writes out/line_NN.wav (or the item's "file") and out/pitch.json (scripts/clone_voice.py)."""
     (out / "lines.json").write_text(json.dumps(lines, ensure_ascii=False), encoding="utf-8")
     subprocess.run([sys.executable, str(Path(__file__).with_name("clone_voice.py")), str(sample),
                     str(out / "lines.json"), str(out), NARRATION_LANGUAGE], check=True, timeout=5400)
@@ -2017,19 +2065,40 @@ def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
     if audio_seconds(clean) < 6:
         raise ValueError(f"the voice sample {sample.name} has under 6 seconds of speech; 15-30 seconds work best")
     scenes = sb["scenes"]
-    speak_lines([s["narration"] for s in scenes], clean, out)
+    says = {i: s for i, s in enumerate(scenes) if s.get("dialogue")}
+    speak_lines([s["narration"] for s in scenes] + [
+        {"text": s["dialogue"], "file": f"say_{i:02d}.wav", "voice": s["dialogue_voice"],
+         "ref": character_ref(s["dialogue_voice"])} for i, s in says.items()], clean, out)
+    try:
+        pitches = json.loads((out / "pitch.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pitches = {}
     trim = "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.03"
     # every take: silence cut off both ends and long pauses inside the line shortened to a natural
     # breath. No noise filter: spectral denoising made the cloned voice sound metallic and robotic.
     clean_take = (f"highpass=f=60,{trim},areverse,{trim},areverse,"
                   "silenceremove=stop_periods=-1:stop_duration=0.35:stop_threshold=-50dB")  # pauses: 0.35 s at most
-    pre, post, takes = 0.05, 0.2, {}
+    pre, post, takes, report_voices = 0.05, 0.2, {}, []
     for i, s in enumerate(scenes):
         if s["narration"]:
             takes[i] = out / f"take_{i:02d}.wav"
             ff("-i", str(out / f"line_{i:02d}.wav"), "-af", clean_take, "-ar", "44100", "-ac", "1", str(takes[i]))
             if audio_seconds(takes[i]) < 0.4:
                 raise ValueError(f"line {i + 1} came out empty")
+            raw_say = out / f"say_{i:02d}.wav"
+            if i in says and raw_say.exists():  # the character speaks right after the narrator's line
+                kind, say = s["dialogue_voice"], out / f"said_{i:02d}.wav"
+                try:
+                    character_take(raw_say, kind, pitches.get(raw_say.name), character_ref(kind), say, trim)
+                    if audio_seconds(say) < 0.3:
+                        raise ValueError("empty")
+                    both = out / f"both_{i:02d}.wav"
+                    ff("-i", str(takes[i]), "-i", str(say), "-filter_complex",
+                       "[0:a]apad=pad_dur=0.22[a];[a][1:a]concat=n=2:v=0:a=1", "-ar", "44100", "-ac", "1", str(both))
+                    takes[i] = both
+                    report_voices.append(kind)
+                except (ValueError, subprocess.SubprocessError) as e:
+                    print(f"  character line of scene {i + 1} left out ({str(e)[:80]})")
     # fit the narration into the planned running time: a slightly brisker delivery (same pitch) when
     # the takes run long, never more than 7% faster (more than that stops sounding like the owner)
     raw = sum(audio_seconds(t) + pre + post for t in takes.values()) + 2.5 * (len(scenes) - len(takes))
@@ -2055,6 +2124,9 @@ def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
     ff(*sum((["-i", str(x)] for x in pieces), []), "-filter_complex",
        "".join(f"[{i}:a]" for i in range(len(pieces))) + f"concat=n={len(pieces)}:v=0:a=1,"
        "loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "44100", "-ac", "2", str(voice))
+    if report_voices:
+        print(f"  character voices: {', '.join(report_voices)}")
+        sb["voice"] = sb.get("voice", "owner's cloned voice") + f"; character lines in AI voices ({', '.join(report_voices)})"
     print(f"  voice: {sum(1 for s in scenes if s['narration'])} lines in your cloned voice, "
           f"{audio_seconds(voice):.1f} s (sample: {sample.name})")
     return voice
@@ -2570,7 +2642,34 @@ def prepare_scripts() -> None:
             return
 
 
+def voice_test(dest: Path) -> int:
+    """'Test my cloned voice': one sentence in the narrator's voice and one short line in every character
+    voice, as files to listen to. Uploads nothing."""
+    sample = voice_sample()
+    if not sample:
+        sys.exit("No voice sample yet: upload a 15-30 s clip of your voice as voice/sample.mp3")
+    hindi = NARRATION_LANGUAGE.lower() == "hindi"
+    narr = ("किसी ने कभी नहीं पूछा कि उसे नींद क्यों नहीं आती। और बस ऐसे ही, उसे एक घर मिल गया।" if hindi else
+            "Nobody ever asked why he couldn't sleep. And just like that, he had a home.")
+    line = "अरे रुको! मुझे भी साथ ले चलो!" if hindi else "Hey, wait! Take me with you!"
+    sb = {"scenes": [{"narration": narr, "seconds": 5, "dialogue": "", "dialogue_voice": ""}]}
+    sb["scenes"] += [{"narration": "फिर एक आवाज़ आई।" if hindi else "Then a voice called out.", "seconds": 4,
+                      "dialogue": line, "dialogue_voice": k} for k in CHARACTER_PITCH]
+    work = OUT / "voice-test"
+    cloned_voice(sb, sample, work)
+    dest.mkdir(parents=True, exist_ok=True)
+    ff("-i", str(work / "voice" / "take_00.wav"), str(dest / "0-narrator-your-voice.wav"))
+    for n, k in enumerate(CHARACTER_PITCH, 1):
+        said = work / "voice" / f"said_{n:02d}.wav"
+        if said.exists():
+            ff("-i", str(said), str(dest / f"{n}-{k}.wav"))
+    print(f"Voices written to {dest}: " + ", ".join(sorted(x.name for x in dest.glob('*.wav'))))
+    return 0
+
+
 def main() -> int:
+    if os.getenv("VOICE_TEST_DIR"):
+        return voice_test(Path(os.environ["VOICE_TEST_DIR"]))
     if TEASER:
         return teaser_main()
     # Scheduled runs skip if this format was uploaded in the last few hours. With a catch-up

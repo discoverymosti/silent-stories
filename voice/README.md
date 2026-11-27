@@ -16,6 +16,16 @@ Until a sample is here, no video is published (never a silent one). Only ever us
 Privacy: if this repository is public, anyone can download the sample. Your narrated videos are
 public too, but a clean sample is easier to misuse; make the repository private if that worries you.
 
+## Character voices
+On the entertainment channel two or three short lines per story are spoken by the characters themselves
+(man, woman, boy, girl, old man, old woman, creature, giant) in other AI voices; you stay the narrator.
+These are the voice model's own stock voice, tuned in pitch for each kind of character: nobody's voice is
+cloned. The **Test my cloned voice** workflow lets you hear every one of them.
+
+To give a character a voice of your choice, put a 15-30 second clip in `voice/characters/` named after
+the kind, e.g. `voice/characters/woman.mp3` or `old_man.mp3`. Only use clips of people who agreed to it
+(yourself acting a voice works well). `CHARACTER_VOICES=off` goes back to the narrator alone.
+
 ## Settings (repository variables)
 - `NARRATION`: `clone` (default, as above) · `record` (you record every video yourself: the pipeline
   writes `voice/<story>/script.md`, you upload your recording into that folder, and the video is built

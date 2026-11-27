@@ -153,6 +153,8 @@ jobs:
           VOICE_AHEAD: ${{ vars.VOICE_AHEAD || '3' }}
           # how the cloned voice speaks (empty = the owner's chosen 'more expressive' setting); compare by ear with 'Test my cloned voice'
           VOICE_CFG: ${{ vars.VOICE_CFG }}
+          # a few lines per story spoken by the characters in other AI voices (off = narrator only)
+          CHARACTER_VOICES: ${{ vars.CHARACTER_VOICES || 'on' }}
           VOICE_EXAGGERATION: ${{ vars.VOICE_EXAGGERATION }}
           VOICE_TEMPERATURE: ${{ vars.VOICE_TEMPERATURE }}
           SKIP_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && !inputs.only_if_due && inputs.skip_upload || 'false' }}
