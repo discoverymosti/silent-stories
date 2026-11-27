@@ -4,7 +4,6 @@
 #         explainer (how it works), fact (surprising true fact)
 # The top line is published next. Mix genres to find what your audience likes.
 
-comedy | A proud rooster oversleeps on the one morning the whole village is counting on him, and tries everything from a pot lid to a borrowed bicycle bell to fake his crow before anyone notices.
 mystery | Every morning one more painted pot disappears from a potter's shelf, so she dusts the floor with flour and follows the tiny footprints to a rooftop garden nobody knew existed.
 romance | A shy tea-stall boy and a girl who sells flowers across the road trade small paper notes in tea glasses and marigolds for a whole monsoon, until the day her stall is gone and he has only one unread note to find her.
 horror | A night guard at an old doll factory counts the dolls on one shelf every hour, and each time there is one fewer, until the last count, when the shelf is full again and one of the dolls is wearing his cap.
