@@ -703,7 +703,7 @@ SCREENPLAY_RULES_TECH = """SCREENPLAY RULES (write the screenplay first, then sh
 """
 
 DIALOGUE_RULES = """CHARACTER VOICE RULES (the narrator tells the story; now and then a character speaks for itself)
-- 2 or 3 scenes, never more, also have a "dialogue": one short line (3-8 words, in {lang}, same script as the
+- {count} scenes, never more, also have a "dialogue": one short line (3-8 words, in {lang}, same script as the
   narration) that a character visible in that scene says out loud, at the moment it matters most: a cry,
   a joke, a plea, the punchline, the reveal. All other scenes have "dialogue": "".
 - "dialogue_voice": who is speaking, exactly one of: man, woman, boy, girl, old_man, old_woman,
@@ -1264,7 +1264,8 @@ def storyboard(genre: str, idea: str) -> dict:
             '"query": str, "caption": str, "seconds": number}]}', '"query": str, "caption": str, "narration": str, '
             + ('"dialogue": str, "dialogue_voice": str, ' if CHARACTERS else "") + '"seconds": number}]}')
         if CHARACTERS:
-            prompt = prompt.replace("VISUAL RULES", DIALOGUE_RULES.format(lang=NARRATION_LANGUAGE) + "\nVISUAL RULES", 1)
+            prompt = prompt.replace("VISUAL RULES", DIALOGUE_RULES.format(
+                lang=NARRATION_LANGUAGE, count="5 to 7" if FILM else "2 or 3") + "\nVISUAL RULES", 1)
     for attempt in range(2):  # an incomplete storyboard gets one fresh try
         try:
             sb = json.loads(_strip_fences(ask_ai(prompt)))
@@ -1308,7 +1309,7 @@ def storyboard(genre: str, idea: str) -> dict:
         s.setdefault("query", s["image_prompt"][:40])
         if isinstance(s.get("cast"), str):
             s["cast"] = [s["cast"]]
-    for extra in [s for s in sb["scenes"] if s["dialogue"]][3:]:  # a few lines, not a radio play
+    for extra in [s for s in sb["scenes"] if s["dialogue"]][7 if FILM else 3:]:  # a few lines, not a radio play
         extra["dialogue"] = extra["dialogue_voice"] = ""
     time_screenplay(sb["scenes"])
     if VOICED and sum(1 for s in sb["scenes"] if s["narration"]) < len(sb["scenes"]) * 0.7:
