@@ -2,10 +2,12 @@
 # genres: romance (love story), drama, suspense, comedy, sci-fi, horror, mystery, thriller, adventure, fantasy,
 #         moral, motivational, emotional,
 #         explainer (how it works), fact (surprising true fact)
+# A line that starts with @jasoos after the genre is an episode of the series in series.json.
 # The top line is published next. Mix genres to find what your audience likes.
 
 romance | A shy tea-stall boy and a girl who sells flowers across the road trade small paper notes in tea glasses and marigolds for a whole monsoon, until the day her stall is gone and he has only one unread note to find her.
-comedy | A self-declared village detective with a magnifying glass tied to a stick investigates the case of the missing temple bell, questioning everyone in the lane except the goat that is wearing it.
+mystery | @jasoos The case of the laddoos that vanish from the sweet shop every noon: Golgappa suspects the new postman, while a trail of sugar leads to the schoolmaster's parrot.
+comedy | @jasoos The case of the missing temple bell: Golgappa questions everyone in the lane except the goat that is wearing it.
 emotional | A small boy trades his new pencil box, one pencil a day, for a classmate's stale lunch, until his mother finds out why his friend's box is always empty and packs two lunches the next morning.
 horror | A night guard at an old doll factory counts the dolls on one shelf every hour, and each time there is one fewer, until the last count, when the shelf is full again and one of the dolls is wearing his cap.
 suspense | A watch repairer notices that the stranger who left a pocket watch for mending has been standing across the street all night, and the watch is ticking down to an hour scratched inside its lid.

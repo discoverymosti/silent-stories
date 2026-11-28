@@ -428,6 +428,14 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
             "a gasp, a reveal, a win, a lesson, a tear).\nVary the heroes and settings too: children, elders, "
             "workers, inventors, travellers, animals, robots, objects that come alive; city, village, sea, space, "
             "past and future. At most one idea about a stray animal being rescued or befriended.")
+        try:
+            shows = json.loads((CH_DIR / "series.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            shows = {}
+        if shows and not FILM:
+            prompt += ("\nOur recurring series: " + "; ".join(f'"@{k}" = {v.get("pitch", v.get("title", k))}' for k, v in shows.items())
+                       + '.\nOne or two of the ideas are new episodes of a series: write the idea as "@<key> <this '
+                       'episode\'s case in one sentence>" with genre "comedy" or "mystery". Never repeat a case.')
     try:
         ideas = json.loads(_strip_fences(ask_ai(prompt)))["ideas"]
     except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
@@ -1190,6 +1198,35 @@ TECH_WORDING = [
 ]
 
 
+SERIES_RULES = """
+SERIES RULES (this video is an episode of our recurring series "{title}")
+- The series: {pitch}.
+- {rules}
+- Use these saved characters EXACTLY as written, with the same ids, in "cast" (you may add one or two
+  episode characters with other ids):
+{cast}
+- When a series character speaks, "dialogue_voice" is: {voices}.
+- The title starts with "{title}:" and then names this episode's case.
+- The episode must be understandable to someone who has never seen the series.
+"""
+
+
+def series_for(idea: str) -> tuple[dict | None, str]:
+    """A queue idea that starts with "@key" is an episode of the recurring series `key` in series.json:
+    (the series, the idea without the tag). Anything else: (None, idea)."""
+    m = re.match(r"@([\w-]+)\s+(.+)", idea, re.S)
+    if not m:
+        return None, idea
+    try:
+        s = json.loads((CH_DIR / "series.json").read_text(encoding="utf-8")).get(m.group(1).lower())
+    except (OSError, ValueError):
+        s = None
+    if not (isinstance(s, dict) and s.get("title") and s.get("cast")):
+        print(f"  note: no series '{m.group(1)}' in series.json; treated as a normal idea")
+        return None, m.group(2).strip()
+    return s, m.group(2).strip()
+
+
 def narrated(prompt: str) -> str:
     """The prompts were written for silent videos: wording for videos the owner narrates."""
     for old, new in [
@@ -1208,8 +1245,9 @@ def narrated(prompt: str) -> str:
 
 
 def storyboard(genre: str, idea: str) -> dict:
+    series, plot = series_for(idea)
     prompt = STORYBOARD_PROMPT.format(
-        genre=genre, idea=idea, channel=CHANNEL_NAME,
+        genre=genre, idea=plot, channel=CHANNEL_NAME,
         images="cartoon animation images" if ANIMATED else "cinematic images",
         style_rule=STYLE_RULE_TOON.format(style=STYLE) if ANIMATED else STYLE_RULE_REAL,
         cast_rule=(CAST_RULE_TOON if ANIMATED else CAST_RULE_REAL).format(),
@@ -1247,6 +1285,11 @@ def storyboard(genre: str, idea: str) -> dict:
             "a win, a lesson, a tear).").replace(
             "emotional curiosity", "curiosity that fits the genre").replace(
             "-> emotional resolution.", "-> a resolution that fits the genre.")
+    if series:
+        prompt += SERIES_RULES.format(
+            title=series["title"], pitch=series.get("pitch", ""), rules=series.get("rules", ""),
+            cast="\n".join(f'  {{"id": "{c["id"]}", "name": "{c["name"]}", "look": "{c["look"]}"}}' for c in series["cast"]),
+            voices=", ".join(f'{c["name"]} = {c.get("voice", "man")}' for c in series["cast"]))
     projects = github_alternatives() if TECH and genre == "repos" else []
     if TECH and genre == "repos":
         if len(projects) < 6:
@@ -1289,8 +1332,14 @@ def storyboard(genre: str, idea: str) -> dict:
     if TECH and sb["music_mood"] in ("sad", "warm"):  # explainer music, not drama music
         sb["music_mood"] = "curious"
     sb["cast"] = [c for c in sb.get("cast") or [] if isinstance(c, dict) and c.get("look")]
+    if series:  # the saved character designs, word for word: the heroes look the same in every episode
+        saved = [{k: c[k] for k in ("id", "name", "look")} for c in series["cast"]]
+        sb["cast"] = saved + [c for c in sb["cast"] if c.get("id") not in {x["id"] for x in saved}]
+        sb["series"] = series["title"]
+        if series.get("hashtag"):
+            sb["hashtags"] = [series["hashtag"]] + [h for h in sb.get("hashtags") or [] if isinstance(h, str)]
     sb["locations"] = [l for l in sb.get("locations") or [] if isinstance(l, dict) and l.get("look")]
-    fix_screenplay(sb, idea)
+    fix_screenplay(sb, plot)
     for s in sb["scenes"]:
         try:
             secs = float(s.get("seconds", 4.5))

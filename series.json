@@ -1,0 +1,14 @@
+{
+  "jasoos": {
+    "title": "Jasoos Golgappa",
+    "pitch": "Jasoos Golgappa, a round, proud village detective who is sure of every wrong answer, and Chameli, the calm goat who quietly solves each case for him",
+    "hashtag": "#JasoosGolgappa",
+    "cast": [
+      {"id": "A", "name": "village detective Jasoos Golgappa", "voice": "man",
+       "look": "short, round, cheerful man of about 45 with a thick curled black moustache and big round glasses, wearing an oversized mustard-brown trench coat over a white kurta, a bright red woollen muffler and a brown felt hat one size too small; always carries a large magnifying glass tied to a bamboo stick"},
+      {"id": "B", "name": "goat Chameli", "voice": "creature",
+       "look": "small white goat with one black ear, half-closed unimpressed eyes, a tiny brass bell on a blue thread collar and a marigold tucked behind the black ear"}
+    ],
+    "rules": "Every episode is one small village mystery. Golgappa announces a grand, wrong theory and accuses the wrong suspect; Chameli notices the real clue in the background (the viewer sees it before he does) and nudges him to the answer; he proudly takes the credit and she gives the camera one tired look in the last scene. Golgappa's lines are short and boastful; Chameli only ever says one dry word or a bleat."
+  }
+}
