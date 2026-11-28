@@ -139,6 +139,8 @@ Every video carries a semi-transparent **DiscoveryMosti** watermark (top-left on
 
 ## Second channel: Discovery Mosti TECH
 Silent tech Shorts (AI visuals, captions, original music, no voice), 2 a day, from the same repo and the same free AI keys:
+
+**"repos" list videos:** a queue line `repos | Free open-source projects on GitHub that replace paid apps` makes a countdown of five or six real projects. Their names, descriptions and links are read from GitHub's public search at run time (never invented), a banner on top says what the video is, each item gets a yellow numbered label, the links go into the description, and `channels/tech/repos_used.txt` keeps a project from appearing twice.
 - **What:** how technology works (`explainer`), practical phone/PC/app/AI tips (`tip`), what products do (`product`), and once a day a real tech news story (`news`) taken from the Hacker News front page, with the source linked in the description. Only headlines about technology itself are used (human-interest, politics and company-drama stories are skipped), and every TECH video is written as an explainer, never as an emotional story. Accuracy rules forbid invented numbers or quotes; visuals use generic devices only (no logos or real product photos).
 - **Where:** its own queue `channels/tech/stories.txt`, upload log `channels/tech/done.txt` and YouTube connection `channels/tech/yt_token.enc`; workflow **Discovery Mosti TECH - Publish Short** (`publish-tech.yml`).
 - **When (one Short per window):** 12:30–18:30 IST and 00:30–05:30 IST, daily (07–13 and 19–24 UTC). The Claude upload timer presses its button at 13:20 / 16:20 IST and 01:20 / 03:50 IST.
