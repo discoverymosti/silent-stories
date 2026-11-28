@@ -1,6 +1,7 @@
-# Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, news).
+# Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, repos, news).
 # The top line is used next. When fewer than 5 are left the AI adds more, and one fresh tech news
 # story (Hacker News front page) is put on top at most once a day.
+repos | Free open-source projects on GitHub that replace paid apps
 tip | Holding down the spacebar on mobile virtual keyboards instantly turns the whole key grid into a precise trackpad for fast text editing.
 tip | Turning off browser hardware acceleration frees up gigabytes of computer memory and stops cooling fans from spinning up during basic web browsing.
 list | 5 free open-source media utilities—VLC, HandBrake, Audacity, Blender, and OBS Studio—that replace thousands of dollars in commercial video, audio, and 3D creation software.

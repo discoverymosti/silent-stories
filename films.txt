@@ -3,6 +3,10 @@
 # motivational, emotional.
 # Give each film a character with a goal, an obstacle, a turning point and a payoff. The top line is made next.
 
+comedy | A shy clerk keeps getting phone calls meant for a stranger whose number differs by one digit (a tailor's customer, a bride's father, an angry landlord) and decides to answer as that stranger for one whole day, until the real man calls him to say thank you.
+emotional | A little girl finds her lunch box half empty every afternoon, and instead of telling the teacher she starts packing a second roti and leaving it where the quiet new boy at the back of the class can find it.
+suspense | A feared food critic is invited to a remote home kitchen for the best meal of his life, and with every course he recognises a little more of the cook: the young chef whose restaurant his cruellest review closed ten years ago.
+romance | Every year on the same date an old man sits on the same railway bench with two cups of tea, and the young ticket clerk who finally asks who the second cup is for ends up helping him deliver it.
 mystery | A young postwoman in a hill town keeps receiving letters addressed to a house that burned down fifty years ago, and following them one by one leads her to an old man who has been waiting for an answer his whole life.
 adventure | A lighthouse keeper's grandson and a retired fisherman sail a patched-up boat through fog, a whale's path and a rocky strait to return a lost message bottle to the island it came from.
 romance | A bus conductor and a schoolteacher share the same last seat on the evening bus for a year without learning each other's names, and on the day the route is cancelled each sets out across the city to find the other.

@@ -136,6 +136,8 @@ jobs:
           # no YT_REFRESH_TOKEN here: that secret belongs to the main channel; TECH uses channels/tech/yt_token.enc
           YT_PRIVACY: ${{ vars.YT_PRIVACY || 'public' }}
           CHANNEL: tech
+          # 'repos' videos read real project facts from GitHub's public search
+          GITHUB_TOKEN: ${{ github.token }}
           CHANNEL_NAME: ${{ vars.TECH_CHANNEL_NAME || 'Discovery Mosti TECH' }}
           CHANNEL_HASHTAG: ${{ vars.TECH_CHANNEL_HASHTAG || '#DiscoveryMostiTECH' }}
           # the main channel's 9B thumbnails share the free Cloudflare allowance: TECH uses klein 4B
@@ -179,6 +181,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git add channels/tech/stories.txt channels/tech/done.txt spend.txt
+          if [ -f channels/tech/repos_used.txt ]; then git add channels/tech/repos_used.txt; fi
           # narration scripts written, and scripts + recordings used up by this run
           if [ -d channels/tech/voice ] || git ls-files --error-unmatch channels/tech/voice >/dev/null 2>&1; then git add -A channels/tech/voice; fi
           git diff --cached --quiet || git commit -m "chore: TECH published next story [skip ci]"

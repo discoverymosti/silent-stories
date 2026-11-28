@@ -295,6 +295,8 @@ TECH_RULES = """TECH CHANNEL RULES ("{channel}" explains technology to everyone,
   caption starts with its number ("#1 LibreOffice replaces Microsoft Office"), the paid thing shown crossed
   out before the free one appears; the last scene sums up. Name only real, well-known products you are sure
   are free, never star counts or prices you are not sure of.
+  "repos" = a "list" video about free open-source projects on GitHub that replace paid apps, built ONLY
+  from the REAL PROJECTS block at the end of this prompt (see there).
 - Accuracy first: leave out any detail you are not sure of. Captions explain step by step, like a smart friend.
 - This is an EXPLAINER, never a drama: the technology is the star of every scene. No personal struggles,
   sad, romantic or tear-jerking plots, family or animal stories, heroes or villains. A "news" video shows
@@ -306,6 +308,57 @@ TECH_RULES = """TECH CHANNEL RULES ("{channel}" explains technology to everyone,
 - The description's last line invites viewers to subscribe to {channel} for tech explained without words.
 """
 
+
+
+REPOS_RULES = """
+REAL PROJECTS (fetched from GitHub just now; each line: owner/name | stars | the project's own description)
+{projects}
+
+RULES FOR THIS "repos" VIDEO
+- Pick the 5 or 6 projects ordinary people would find most useful: each must replace a well-known PAID app
+  or service that its own description names. Skip developer libraries, command-line tools and anything
+  whose description does not clearly say what it replaces.
+- Use ONLY what the description says. Never invent features, prices, numbers or star counts.
+- "repos": the owner/name of the projects you picked, in the order they appear.
+- "headline": the banner shown at the top for the whole video: max 4 words with the count, e.g.
+  "6 Free GitHub Projects"; "subline": max 6 words, e.g. "that replace paid apps".
+- Scene 1 is the hook: the promise ("Stop paying for these apps"). Then exactly one scene per project, in
+  order: its caption is "#N <project name> replaces <paid app>" (max 7 words, the short project name only),
+  and its narration says in one plain sentence what the project does and what it replaces. EVERY project
+  scene has this caption: in a "repos" video only the last scenes may have an empty caption.
+- The last scene tells viewers the project names are in the description and invites them to follow for the
+  next part.
+- Pictures: the cartoon guide with a generic, unbranded screen that shows the KIND of app (a calendar, a
+  video editor, a chat window); the paid kind fades or is crossed out as the free one appears. No logos.
+"""
+
+
+def github_alternatives(limit: int = 16) -> list[dict]:
+    """Popular open-source projects whose own GitHub description says which paid tool they replace, minus
+    the ones already used in a video. [] when GitHub can't be reached."""
+    used_file = CH_DIR / "repos_used.txt"
+    used = set(used_file.read_text(encoding="utf-8").lower().split()) if used_file.exists() else set()
+    headers = {"Accept": "application/vnd.github+json"}
+    if os.getenv("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    try:
+        r = requests.get("https://api.github.com/search/repositories", headers=headers, timeout=30, params={
+            "q": "alternative in:description stars:>4000 archived:false", "sort": "stars", "per_page": 100})
+        r.raise_for_status()
+        items = r.json().get("items", [])
+    except (requests.RequestException, ValueError) as e:
+        print(f"  GitHub projects unavailable ({str(e)[:120]})")
+        return []
+    found = []
+    for it in items:
+        desc = " ".join(str(it.get("description") or "").replace("|", "/").split())
+        name = str(it.get("full_name") or "")
+        if (name and name.lower() not in used and "alternative" in desc.lower() and it.get("license")
+                and not name.split("/")[-1].lower().startswith("awesome")):
+            found.append({"name": name, "stars": int(it.get("stargazers_count") or 0), "description": desc[:170],
+                          "url": it.get("html_url") or f"https://github.com/{name}"})
+    random.shuffle(found)  # a different mix every video; the AI picks the best five or six
+    return found[:limit]
 
 
 TECH_VISUALS = ("clean modern tech look (macro shots of chips and circuits, glowing data, hands using generic "
@@ -358,7 +411,9 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
             "an emotional character story.") + (
             '\nGenres for this tech channel: about half "explainer" (how a technology works), a fifth "tip" '
             '(a practical phone/PC/app/AI tip anyone can try), a fifth "list" (a numbered countdown of 4-6 '
-            'items, e.g. free apps that replace paid ones, with the money or time saved) and the rest "product" '
+            'items, e.g. free apps that replace paid ones, with the money or time saved), one idea in six "repos" '
+            '(exactly this text as the idea: "Free open-source projects on GitHub that replace paid apps"; the '
+            'pipeline supplies the real projects) and the rest "product" '
             '(what a kind of product or a well-known launch does and why it matters). Only facts you are sure of.')
     else:  # entertainment channel: all kinds of stories, never a queue of look-alike tear-jerkers
         prompt = prompt.replace(
@@ -373,6 +428,14 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
             "a gasp, a reveal, a win, a lesson, a tear).\nVary the heroes and settings too: children, elders, "
             "workers, inventors, travellers, animals, robots, objects that come alive; city, village, sea, space, "
             "past and future. At most one idea about a stray animal being rescued or befriended.")
+        try:
+            shows = json.loads((CH_DIR / "series.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            shows = {}
+        if shows and not FILM:
+            prompt += ("\nOur recurring series: " + "; ".join(f'"@{k}" = {v.get("pitch", v.get("title", k))}' for k, v in shows.items())
+                       + '.\nOne or two of the ideas are new episodes of a series: write the idea as "@<key> <this '
+                       'episode\'s case in one sentence>" with genre "comedy" or "mystery". Never repeat a case.')
     try:
         ideas = json.loads(_strip_fences(ask_ai(prompt)))["ideas"]
     except (SystemExit, Exception) as e:  # refilling is best effort; the run goes on
@@ -648,7 +711,7 @@ SCREENPLAY_RULES_TECH = """SCREENPLAY RULES (write the screenplay first, then sh
 """
 
 DIALOGUE_RULES = """CHARACTER VOICE RULES (the narrator tells the story; now and then a character speaks for itself)
-- 2 or 3 scenes, never more, also have a "dialogue": one short line (3-8 words, in {lang}, same script as the
+- {count} scenes, never more, also have a "dialogue": one short line (3-8 words, in {lang}, same script as the
   narration) that a character visible in that scene says out loud, at the moment it matters most: a cry,
   a joke, a plea, the punchline, the reveal. All other scenes have "dialogue": "".
 - "dialogue_voice": who is speaking, exactly one of: man, woman, boy, girl, old_man, old_woman,
@@ -983,6 +1046,12 @@ def screenplay_problems(sb: dict) -> list[str]:
     if spoken > NARRATION_WORDS[1] * 1.1:
         out.append(f"the narration has {spoken} words, too long to say in {VOICE_SECONDS:.0f} seconds; "
                    f"cut it to {NARRATION_WORDS[0]}-{NARRATION_WORDS[1]} words in all, keeping every scene's line")
+    if TECH and isinstance(sb.get("repos"), list) and sb["repos"]:  # a countdown with a missing number is broken
+        nums = [int(m.group(1)) for c in caps if (m := re.match(r"#\s*(\d+)", c))]
+        want = list(range(1, len(sb["repos"]) + 1))
+        if nums != want:
+            out.append(f"the project scenes must be captioned #1 to #{len(want)} in order, one scene each "
+                       f"(\"#N <project> replaces <paid app>\"); found {nums or 'none'}")
     cast = {c.get("id") for c in sb.get("cast") or [] if isinstance(c, dict)}
     places = {l.get("id") for l in sb.get("locations") or [] if isinstance(l, dict)}
     bad = [str(i + 1) for i, s in enumerate(scenes)
@@ -1129,6 +1198,35 @@ TECH_WORDING = [
 ]
 
 
+SERIES_RULES = """
+SERIES RULES (this video is an episode of our recurring series "{title}")
+- The series: {pitch}.
+- {rules}
+- Use these saved characters EXACTLY as written, with the same ids, in "cast" (you may add one or two
+  episode characters with other ids):
+{cast}
+- When a series character speaks, "dialogue_voice" is: {voices}.
+- The title starts with "{title}:" and then names this episode's case.
+- The episode must be understandable to someone who has never seen the series.
+"""
+
+
+def series_for(idea: str) -> tuple[dict | None, str]:
+    """A queue idea that starts with "@key" is an episode of the recurring series `key` in series.json:
+    (the series, the idea without the tag). Anything else: (None, idea)."""
+    m = re.match(r"@([\w-]+)\s+(.+)", idea, re.S)
+    if not m:
+        return None, idea
+    try:
+        s = json.loads((CH_DIR / "series.json").read_text(encoding="utf-8")).get(m.group(1).lower())
+    except (OSError, ValueError):
+        s = None
+    if not (isinstance(s, dict) and s.get("title") and s.get("cast")):
+        print(f"  note: no series '{m.group(1)}' in series.json; treated as a normal idea")
+        return None, m.group(2).strip()
+    return s, m.group(2).strip()
+
+
 def narrated(prompt: str) -> str:
     """The prompts were written for silent videos: wording for videos the owner narrates."""
     for old, new in [
@@ -1147,8 +1245,9 @@ def narrated(prompt: str) -> str:
 
 
 def storyboard(genre: str, idea: str) -> dict:
+    series, plot = series_for(idea)
     prompt = STORYBOARD_PROMPT.format(
-        genre=genre, idea=idea, channel=CHANNEL_NAME,
+        genre=genre, idea=plot, channel=CHANNEL_NAME,
         images="cartoon animation images" if ANIMATED else "cinematic images",
         style_rule=STYLE_RULE_TOON.format(style=STYLE) if ANIMATED else STYLE_RULE_REAL,
         cast_rule=(CAST_RULE_TOON if ANIMATED else CAST_RULE_REAL).format(),
@@ -1186,6 +1285,18 @@ def storyboard(genre: str, idea: str) -> dict:
             "a win, a lesson, a tear).").replace(
             "emotional curiosity", "curiosity that fits the genre").replace(
             "-> emotional resolution.", "-> a resolution that fits the genre.")
+    if series:
+        prompt += SERIES_RULES.format(
+            title=series["title"], pitch=series.get("pitch", ""), rules=series.get("rules", ""),
+            cast="\n".join(f'  {{"id": "{c["id"]}", "name": "{c["name"]}", "look": "{c["look"]}"}}' for c in series["cast"]),
+            voices=", ".join(f'{c["name"]} = {c.get("voice", "man")}' for c in series["cast"]))
+    projects = github_alternatives() if TECH and genre == "repos" else []
+    if TECH and genre == "repos":
+        if len(projects) < 6:
+            raise SystemExit("Not enough GitHub projects available for a 'repos' video right now.")
+        prompt += REPOS_RULES.format(projects="\n".join(
+            f"{p['name']} | {p['stars']} stars | {p['description']}" for p in projects)) + (
+            '\nAlso return these keys: "repos": [str], "headline": str, "subline": str.')
     if VOICED:
         lo, hi = TOTAL_OK
         prompt = narrated(prompt).replace("VISUAL RULES", NARRATION_RULES.format(
@@ -1196,7 +1307,8 @@ def storyboard(genre: str, idea: str) -> dict:
             '"query": str, "caption": str, "seconds": number}]}', '"query": str, "caption": str, "narration": str, '
             + ('"dialogue": str, "dialogue_voice": str, ' if CHARACTERS else "") + '"seconds": number}]}')
         if CHARACTERS:
-            prompt = prompt.replace("VISUAL RULES", DIALOGUE_RULES.format(lang=NARRATION_LANGUAGE) + "\nVISUAL RULES", 1)
+            prompt = prompt.replace("VISUAL RULES", DIALOGUE_RULES.format(
+                lang=NARRATION_LANGUAGE, count="5 to 7" if FILM else "2 or 3") + "\nVISUAL RULES", 1)
     for attempt in range(2):  # an incomplete storyboard gets one fresh try
         try:
             sb = json.loads(_strip_fences(ask_ai(prompt)))
@@ -1220,8 +1332,14 @@ def storyboard(genre: str, idea: str) -> dict:
     if TECH and sb["music_mood"] in ("sad", "warm"):  # explainer music, not drama music
         sb["music_mood"] = "curious"
     sb["cast"] = [c for c in sb.get("cast") or [] if isinstance(c, dict) and c.get("look")]
+    if series:  # the saved character designs, word for word: the heroes look the same in every episode
+        saved = [{k: c[k] for k in ("id", "name", "look")} for c in series["cast"]]
+        sb["cast"] = saved + [c for c in sb["cast"] if c.get("id") not in {x["id"] for x in saved}]
+        sb["series"] = series["title"]
+        if series.get("hashtag"):
+            sb["hashtags"] = [series["hashtag"]] + [h for h in sb.get("hashtags") or [] if isinstance(h, str)]
     sb["locations"] = [l for l in sb.get("locations") or [] if isinstance(l, dict) and l.get("look")]
-    fix_screenplay(sb, idea)
+    fix_screenplay(sb, plot)
     for s in sb["scenes"]:
         try:
             secs = float(s.get("seconds", 4.5))
@@ -1240,7 +1358,7 @@ def storyboard(genre: str, idea: str) -> dict:
         s.setdefault("query", s["image_prompt"][:40])
         if isinstance(s.get("cast"), str):
             s["cast"] = [s["cast"]]
-    for extra in [s for s in sb["scenes"] if s["dialogue"]][3:]:  # a few lines, not a radio play
+    for extra in [s for s in sb["scenes"] if s["dialogue"]][7 if FILM else 3:]:  # a few lines, not a radio play
         extra["dialogue"] = extra["dialogue_voice"] = ""
     time_screenplay(sb["scenes"])
     if VOICED and sum(1 for s in sb["scenes"] if s["narration"]) < len(sb["scenes"]) * 0.7:
@@ -1253,6 +1371,25 @@ def storyboard(genre: str, idea: str) -> dict:
         sb["grade"] = "teal_orange"
     sb.setdefault("hashtags", [])
     sb.setdefault("tags", [])
+    if projects:  # only projects that were really on the list, with their links in the description
+        real = {p["name"].lower(): p for p in projects}
+        picked = [real[str(x).lower()] for x in sb.get("repos") or [] if str(x).lower() in real]
+        if len(picked) < 4:
+            raise SystemExit(f"The 'repos' storyboard names only {len(picked)} of the real projects.")
+        sb["repos"] = [p["name"] for p in picked]
+        for n, p in enumerate(picked, 1):  # a project scene the AI left without its label gets a plain one
+            short = p["name"].split("/")[-1]
+            if not any(re.match(rf"#\s*{n}\b", s["caption"]) for s in sb["scenes"]):
+                for s in sb["scenes"][1:]:
+                    if not s["caption"] and short.lower() in s.get("narration", "").lower():
+                        s["caption"] = f"#{n} {short}"
+                        break
+        sb["headline"] = " ".join(str(sb.get("headline") or f"{len(picked)} Free GitHub Projects").split())[:34]
+        sb["subline"] = " ".join(str(sb.get("subline") or "that replace paid apps").split())[:44]
+        sb["description"] += "\n\nThe projects (free and open source):\n" + "\n".join(
+            f"{n}. {p['name'].split('/')[-1]}: {p['url']}" for n, p in enumerate(picked, 1))
+    else:
+        sb.pop("repos", None)
     polish_package(sb)
     return sb
 
@@ -1763,7 +1900,7 @@ def ass_escape(text: str) -> str:
 
 def write_captions(scenes: list[dict], starts: list[float], ending: str,
                    end_start: float, end_len: float, dest: Path, title: str = "",
-                   title_len: float = 0.0) -> None:
+                   title_len: float = 0.0, headline: str = "", subline: str = "") -> None:
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -1775,6 +1912,8 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Cap,{FONT},{64 if FILM else 78},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,5,3,2,90,90,{90 if FILM else 520},1
 Style: End,{FONT},92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,6,2,5,110,110,0,1
 Style: Title,{FONT},96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,0,0,5,160,160,0,1
+Style: Pill,{FONT},{58 if FILM else 68},&H00141414,&H00141414,&H0033D6FF,&H0033D6FF,-1,0,0,0,100,100,1,0,3,14,0,2,90,90,{90 if FILM else 520},1
+Style: Head,{FONT},{60 if FILM else 74},&H00FFFFFF,&H00FFFFFF,&H1E101010,&H1E101010,-1,0,0,0,100,100,1,0,3,18,0,8,80,80,{60 if FILM else 190},1
 Style: Tag,{FONT},44,&H00B4B4B4,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4,0,1,3,0,2,90,90,{220 if FILM else 300},1
 
 [Events]
@@ -1793,8 +1932,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             fx = ("\\fad(90,180)\\fscx55\\fscy55\\t(0,170,\\fscx114\\fscy114)\\t(170,300,\\fscx100\\fscy100)"
                   if ANIMATED else  # cartoon captions pop in with a bounce
                   "\\fad(280,220)\\t(0,280,\\fscx104\\fscy104)\\t(280,500,\\fscx100\\fscy100)")
-            lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Cap,,0,0,0,,{{{fx}}}{cap}")
+            # a numbered item ("#3 Cap replaces Loom") is a yellow label, like a sticker on the video
+            style = "Pill" if re.match(r"#\s*\d", cap) else "Cap"
+            lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},{style},,0,0,0,,{{{fx}}}{cap}")
     lines += progress_dots(scenes, starts, end_start)
+    if headline:  # list videos: what the video is, on top from the first frame to the closing line
+        text = ass_escape(headline) + (f"\\N{{\\fs{38 if FILM else 46}\\1c&H5A5AFF&}}{ass_escape(subline)}" if subline else "")
+        lines.append(f"Dialogue: 1,{ass_time(starts[0])},{ass_time(end_start)},Head,,0,0,0,,{{\\fad(0,250)}}{text}")
     a, b = end_start + 0.5, end_start + end_len - 0.3
     lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},End,,0,0,0,,{{\\fad(600,400)}}{ass_escape(ending)}")
     lines.append(f"Dialogue: 0,{ass_time(a + 0.8)},{ass_time(b)},Tag,,0,0,0,,{{\\fad(600,400)}}"
@@ -2195,7 +2339,8 @@ def finish_video(sb: dict, parts: list[Path], lengths: list[float], work: Path, 
     scene_starts = starts[1:] if FILM else starts
     end_start = starts[-1] if FILM else starts[-1] + sb["scenes"][-1]["seconds"] - 0.2
     write_captions(sb["scenes"], scene_starts, sb["ending"], end_start, total - end_start, subs,
-                   title=sb["title"] if FILM else "", title_len=intro_len)
+                   title=sb["title"] if FILM else "", title_len=intro_len,
+                   headline=sb.get("headline", ""), subline=sb.get("subline", ""))
     music = work / "music.m4a"
     report["music"] = make_music(sb.get("music_mood", "warm"), total, music)
     if voice:  # the first scene starts where the film's title card ends
@@ -2769,6 +2914,9 @@ def main() -> int:
         return 0
     vid = upload(final, thumb, meta)
     mark_done(idea, vid)
+    if sb.get("repos"):  # never the same project in two videos
+        with (CH_DIR / "repos_used.txt").open("a", encoding="utf-8") as f:
+            f.write("\n".join(sb["repos"]) + "\n")
     if folder:  # script and recording are used up; get the next scripts ready to record
         shutil.rmtree(folder, ignore_errors=True)
         prepare_scripts()
