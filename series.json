@@ -4,11 +4,52 @@
     "pitch": "Jasoos Golgappa, a round, proud village detective who is sure of every wrong answer, and Chameli, the calm goat who quietly solves each case for him",
     "hashtag": "#JasoosGolgappa",
     "cast": [
-      {"id": "A", "name": "village detective Jasoos Golgappa", "voice": "man",
-       "look": "short, round, cheerful man of about 45 with a thick curled black moustache and big round glasses, wearing an oversized mustard-brown trench coat over a white kurta, a bright red woollen muffler and a brown felt hat one size too small; always carries a large magnifying glass tied to a bamboo stick"},
-      {"id": "B", "name": "goat Chameli", "voice": "creature",
-       "look": "small white goat with one black ear, half-closed unimpressed eyes, a tiny brass bell on a blue thread collar and a marigold tucked behind the black ear"}
+      {
+        "id": "A",
+        "name": "village detective Jasoos Golgappa",
+        "voice": "man",
+        "look": "short, round, cheerful man of about 45 with a thick curled black moustache and big round glasses, wearing an oversized mustard-brown trench coat over a white kurta, a bright red woollen muffler and a brown felt hat one size too small; always carries a large magnifying glass tied to a bamboo stick"
+      },
+      {
+        "id": "B",
+        "name": "goat Chameli",
+        "voice": "creature",
+        "look": "small white goat with one black ear, half-closed unimpressed eyes, a tiny brass bell on a blue thread collar and a marigold tucked behind the black ear"
+      }
     ],
     "rules": "Every episode is one small village mystery. Golgappa announces a grand, wrong theory and accuses the wrong suspect; Chameli notices the real clue in the background (the viewer sees it before he does) and nudges him to the answer; he proudly takes the credit and she gives the camera one tired look in the last scene. Golgappa's lines are short and boastful; Chameli only ever says one dry word or a bleat."
+  },
+  "guddu": {
+    "title": "Guddu Ke Kisse",
+    "pitch": "Guddu, an eleven-year-old schoolboy whose small everyday problems (homework, exams, festivals, relatives) always explode into total chaos, told by the narrator as stories about a childhood friend",
+    "hashtag": "#GudduKeKisse",
+    "style": "2D hand-drawn cartoon, thick black outlines, flat bright colours, simple rounded characters with big round white eyes and small pupils, wildly exaggerated faces and poses (screaming mouths, bulging eyes, flailing arms), comic action lines and impact bursts, funny animated web-series look",
+    "cast": [
+      {
+        "id": "A",
+        "name": "schoolboy Guddu",
+        "voice": "boy",
+        "look": "skinny eleven-year-old boy with spiky black hair and one stubborn tuft standing straight up, a gap-toothed grin, light blue school shirt with an ink stain on the pocket, navy shorts and an oversized green backpack"
+      },
+      {
+        "id": "B",
+        "name": "Guddu's mother",
+        "voice": "woman",
+        "look": "sturdy woman of about 40 in a yellow salwar kameez with a long plait over one shoulder, sharp eyebrows, bangles on both wrists, always holding a wooden rolling pin"
+      },
+      {
+        "id": "C",
+        "name": "best friend Bunty",
+        "voice": "boy",
+        "look": "round, slow-moving boy of eleven with thick square glasses and a bowl haircut, same school uniform, always holding something to eat"
+      },
+      {
+        "id": "D",
+        "name": "teacher Sharma Sir",
+        "voice": "old_man",
+        "look": "tall, thin teacher of about 55 with a grey side parting, a chalk-dusted brown sleeveless sweater over a white shirt and a long wooden ruler"
+      }
+    ],
+    "rules": "Every episode is one relatable situation. The narrator tells it as a memory about a friend (\"My friend Guddu...\") and never speaks as Guddu. Scene 1 shows the ordinary problem; each scene makes it worse in a bigger, sillier way; the last scene is the reaction of Guddu's mother or Sharma Sir, which is the punchline. Use only the characters the episode needs."
   }
 }
