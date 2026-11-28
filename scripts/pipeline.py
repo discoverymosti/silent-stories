@@ -324,7 +324,8 @@ RULES FOR THIS "repos" VIDEO
   "6 Free GitHub Projects"; "subline": max 6 words, e.g. "that replace paid apps".
 - Scene 1 is the hook: the promise ("Stop paying for these apps"). Then exactly one scene per project, in
   order: its caption is "#N <project name> replaces <paid app>" (max 7 words, the short project name only),
-  and its narration says in one plain sentence what the project does and what it replaces.
+  and its narration says in one plain sentence what the project does and what it replaces. EVERY project
+  scene has this caption: in a "repos" video only the last scenes may have an empty caption.
 - The last scene tells viewers the project names are in the description and invites them to follow for the
   next part.
 - Pictures: the cartoon guide with a generic, unbranded screen that shows the KIND of app (a calendar, a
@@ -1037,6 +1038,12 @@ def screenplay_problems(sb: dict) -> list[str]:
     if spoken > NARRATION_WORDS[1] * 1.1:
         out.append(f"the narration has {spoken} words, too long to say in {VOICE_SECONDS:.0f} seconds; "
                    f"cut it to {NARRATION_WORDS[0]}-{NARRATION_WORDS[1]} words in all, keeping every scene's line")
+    if TECH and isinstance(sb.get("repos"), list) and sb["repos"]:  # a countdown with a missing number is broken
+        nums = [int(m.group(1)) for c in caps if (m := re.match(r"#\s*(\d+)", c))]
+        want = list(range(1, len(sb["repos"]) + 1))
+        if nums != want:
+            out.append(f"the project scenes must be captioned #1 to #{len(want)} in order, one scene each "
+                       f"(\"#N <project> replaces <paid app>\"); found {nums or 'none'}")
     cast = {c.get("id") for c in sb.get("cast") or [] if isinstance(c, dict)}
     places = {l.get("id") for l in sb.get("locations") or [] if isinstance(l, dict)}
     bad = [str(i + 1) for i, s in enumerate(scenes)
@@ -1320,6 +1327,13 @@ def storyboard(genre: str, idea: str) -> dict:
         if len(picked) < 4:
             raise SystemExit(f"The 'repos' storyboard names only {len(picked)} of the real projects.")
         sb["repos"] = [p["name"] for p in picked]
+        for n, p in enumerate(picked, 1):  # a project scene the AI left without its label gets a plain one
+            short = p["name"].split("/")[-1]
+            if not any(re.match(rf"#\s*{n}\b", s["caption"]) for s in sb["scenes"]):
+                for s in sb["scenes"][1:]:
+                    if not s["caption"] and short.lower() in s.get("narration", "").lower():
+                        s["caption"] = f"#{n} {short}"
+                        break
         sb["headline"] = " ".join(str(sb.get("headline") or f"{len(picked)} Free GitHub Projects").split())[:34]
         sb["subline"] = " ".join(str(sb.get("subline") or "that replace paid apps").split())[:44]
         sb["description"] += "\n\nThe projects (free and open source):\n" + "\n".join(
