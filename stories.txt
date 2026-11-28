@@ -2,10 +2,13 @@
 # genres: romance (love story), drama, suspense, comedy, sci-fi, horror, mystery, thriller, adventure, fantasy,
 #         moral, motivational, emotional,
 #         explainer (how it works), fact (surprising true fact)
-# A line that starts with @jasoos after the genre is an episode of the series in series.json.
+# A line that starts with @jasoos or @guddu after the genre is an episode of that series in series.json.
 # The top line is published next. Mix genres to find what your audience likes.
 
 romance | A shy tea-stall boy and a girl who sells flowers across the road trade small paper notes in tea glasses and marigolds for a whole monsoon, until the day her stall is gone and he has only one unread note to find her.
+relatable | @guddu The morning Guddu remembers, at the school gate, that today is the maths test: his plan to fake a fever grows from a warm towel to a full hospital drama.
+relatable | @guddu Guddu is trusted with lighting one small Diwali sparkler, and within a minute the whole lane's fireworks, a wedding band and three aunties are involved.
+relatable | The one cousin at every wedding who is told to guard the shoes, falls asleep, and wakes up to find he has become the most important person in the bargaining.
 mystery | @jasoos The case of the laddoos that vanish from the sweet shop every noon: Golgappa suspects the new postman, while a trail of sugar leads to the schoolmaster's parrot.
 comedy | @jasoos The case of the missing temple bell: Golgappa questions everyone in the lane except the goat that is wearing it.
 emotional | A small boy trades his new pencil box, one pencil a day, for a classmate's stale lunch, until his mother finds out why his friend's box is always empty and packs two lunches the next morning.

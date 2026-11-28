@@ -216,8 +216,18 @@ STORY_GENRES = {
     "moral": "a folk-tale style fable: a choice, its consequence and a clear lesson anyone can retell",
     "motivational": "someone fails, keeps going against the odds and wins; the viewer leaves inspired",
     "emotional": "a tender micro-drama about kindness, love or loss",
+    "relatable": "a moment everyone in India knows from their own life (school, exams, tuition, festivals, weddings, "
+                 "cricket in the lane, strict parents, relatives, power cuts) blown up into absurd cartoon chaos: it "
+                 "starts ordinary, escalates wildly with every scene, and ends on a punchline the viewer recognises; "
+                 "fast, loud and funny, told the way a friend tells a story about their childhood",
 }
-GENRE_MIX = ("romance (a love story), drama, suspense, comedy, sci-fi, horror (scary, never gory), mystery, thriller, "
+# genres with their own drawn look (a series in series.json can set "style" too)
+GENRE_STYLE = {
+    "relatable": "2D hand-drawn cartoon, thick black outlines, flat bright colours, simple rounded characters with "
+                 "big round white eyes and small pupils, wildly exaggerated faces and poses (screaming mouths, bulging "
+                 "eyes, flailing arms), comic action lines and impact bursts, funny animated web-series look",
+}
+GENRE_MIX = ("relatable (everyday-life comedy), romance (a love story), drama, suspense, comedy, sci-fi, horror (scary, never gory), mystery, thriller, "
              "adventure, fantasy, moral (a fable with a lesson), motivational and emotional")
 # other ways the owner or the AI may write a genre in the queue
 GENRE_ALIASES = {"love story": "romance", "love": "romance", "romantic": "romance", "scifi": "sci-fi", "sifi": "sci-fi",
@@ -1249,7 +1259,8 @@ def storyboard(genre: str, idea: str) -> dict:
     prompt = STORYBOARD_PROMPT.format(
         genre=genre, idea=plot, channel=CHANNEL_NAME,
         images="cartoon animation images" if ANIMATED else "cinematic images",
-        style_rule=STYLE_RULE_TOON.format(style=STYLE) if ANIMATED else STYLE_RULE_REAL,
+        style_rule=STYLE_RULE_TOON.format(style=(series or {}).get("style") or GENRE_STYLE.get(genre) or STYLE)
+        if ANIMATED else STYLE_RULE_REAL,
         cast_rule=(CAST_RULE_TOON if ANIMATED else CAST_RULE_REAL).format(),
         engage_rules=(ENGAGE_RULES_TECH if TECH else ENGAGE_RULES_TOON) if ANIMATED else "")
     if FILM:
@@ -1365,7 +1376,8 @@ def storyboard(genre: str, idea: str) -> dict:
         raise SystemExit("Storyboard has no usable narration (the AI left most scenes without a line).")
     sb.setdefault("style", "cinematic film still, soft natural light, 35mm, shallow depth of field")
     if ANIMATED:
-        sb["style"] = STYLE  # one channel look, whatever the storyboard answered
+        # one look per video, whatever the storyboard answered: the series' or genre's own, else the channel's
+        sb["style"] = (series or {}).get("style") or GENRE_STYLE.get(genre) or STYLE
     sb.setdefault("characters", "")
     if sb.get("grade") not in GRADES:
         sb["grade"] = "teal_orange"
@@ -1413,7 +1425,8 @@ def full_prompt(sb: dict, scene: dict | str) -> str:
         action = re.sub(rf"\b{re.escape(i)}\b", f"the {names[i]}", action)
     parts = [f"Shot: {scene.get('shot') or 'medium shot'}", f"Action: {action}"]
     if ANIMATED:  # the look comes first: image models weigh the start of a prompt most
-        parts.insert(0, STYLE[0].upper() + STYLE[1:])
+        look = sb.get("style") or STYLE  # a series or genre may have its own drawn look
+        parts.insert(0, look[0].upper() + look[1:])
     if ids:
         parts.append("Characters: " + "; ".join(f"the {names[i]}: {cast[i]}" for i in ids))
     elif sb.get("characters"):
