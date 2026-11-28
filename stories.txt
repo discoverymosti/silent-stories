@@ -5,7 +5,6 @@
 # A line that starts with @jasoos or @guddu after the genre is an episode of that series in series.json.
 # The top line is published next. Mix genres to find what your audience likes.
 
-romance | A shy tea-stall boy and a girl who sells flowers across the road trade small paper notes in tea glasses and marigolds for a whole monsoon, until the day her stall is gone and he has only one unread note to find her.
 relatable | @guddu The morning Guddu remembers, at the school gate, that today is the maths test: his plan to fake a fever grows from a warm towel to a full hospital drama.
 relatable | @guddu Guddu is trusted with lighting one small Diwali sparkler, and within a minute the whole lane's fireworks, a wedding band and three aunties are involved.
 relatable | The one cousin at every wedding who is told to guard the shoes, falls asleep, and wakes up to find he has become the most important person in the bargaining.
