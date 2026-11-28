@@ -111,6 +111,10 @@ VOICE_DIR = CH_DIR / "voice"
 #   CHARACTER_VOICES=off turns them off. A clip in voice/characters/<kind>.mp3 (e.g. woman.mp3) is used as
 #   that character's voice; without one the model's own stock voice is tuned to the pitch below (Hz).
 CHARACTERS = VOICED and NARRATION == "clone" and not TECH and (os.getenv("CHARACTER_VOICES") or "on").strip().lower() != "off"
+# Spoken-word subtitles: the narration appears on screen a few words at a time, in step with the voice
+# (the usual look of tech Shorts). On for the TECH channel; SUBTITLES=on/off overrides. The main channel
+# narrates in Hindi, which needs a Devanagari caption font the workflow does not install yet.
+SUBTITLES = VOICED and NARRATION == "clone" and (os.getenv("SUBTITLES") or ("on" if TECH else "off")).strip().lower() == "on"
 CHARACTER_PITCH = {"man": 115, "woman": 205, "boy": 255, "girl": 285, "old_man": 100, "old_woman": 185,
                    "creature": 330, "giant": 82}
 VOICE_AHEAD = max(1, int(os.getenv("VOICE_AHEAD") or 3))  # scripts kept ready, so several can be recorded in one go
@@ -305,6 +309,13 @@ TECH_RULES = """TECH CHANNEL RULES ("{channel}" explains technology to everyone,
   caption starts with its number ("#1 LibreOffice replaces Microsoft Office"), the paid thing shown crossed
   out before the free one appears; the last scene sums up. Name only real, well-known products you are sure
   are free, never star counts or prices you are not sure of.
+  "myths" = 3-5 common beliefs about technology that are FALSE, busted one by one: the caption of each
+  item is "#N Myth: <the belief>" and the narration says why it is wrong and what is true instead. Only
+  myths that are well documented as false; if you are not sure, leave it out.
+  "hacks" = 3 quick tricks anyone can try on a phone or PC in under a minute, captions "#N <the trick>",
+  the narration says exactly where to tap or what to press; only features you are sure exist.
+  "versus" = two technologies compared fairly (how each works, what each is better at, who each suits);
+  no winner unless the facts are clear.
   "repos" = a "list" video about free open-source projects on GitHub that replace paid apps, built ONLY
   from the REAL PROJECTS block at the end of this prompt (see there).
 - Accuracy first: leave out any detail you are not sure of. Captions explain step by step, like a smart friend.
@@ -421,7 +432,9 @@ def refill_queue(min_left: int = 2 if FILM else 5) -> None:
             "an emotional character story.") + (
             '\nGenres for this tech channel: about half "explainer" (how a technology works), a fifth "tip" '
             '(a practical phone/PC/app/AI tip anyone can try), a fifth "list" (a numbered countdown of 4-6 '
-            'items, e.g. free apps that replace paid ones, with the money or time saved), one idea in six "repos" '
+            'items, e.g. free apps that replace paid ones, with the money or time saved), one idea in eight each of '
+            '"myths" (3-5 tech myths busted), "hacks" (3 quick tricks anyone can try) and "versus" (two '
+            'technologies compared fairly), one idea in six "repos" '
             '(exactly this text as the idea: "Free open-source projects on GitHub that replace paid apps"; the '
             'pipeline supplies the real projects) and the rest "product" '
             '(what a kind of product or a well-known launch does and why it matters). Only facts you are sure of.')
@@ -1308,6 +1321,10 @@ def storyboard(genre: str, idea: str) -> dict:
         prompt += REPOS_RULES.format(projects="\n".join(
             f"{p['name']} | {p['stars']} stars | {p['description']}" for p in projects)) + (
             '\nAlso return these keys: "repos": [str], "headline": str, "subline": str.')
+    countdown = TECH and genre in ("list", "myths", "hacks")
+    if countdown:  # the banner that says what the video is, on top for the whole video
+        prompt += ('\nAlso return "headline": max 4 words with the count, e.g. "4 Tech Myths" or "3 Phone Tricks", '
+                   'and "subline": max 5 words that finish the thought, e.g. "you still believe".')
     if VOICED:
         lo, hi = TOTAL_OK
         prompt = narrated(prompt).replace("VISUAL RULES", NARRATION_RULES.format(
@@ -1402,6 +1419,8 @@ def storyboard(genre: str, idea: str) -> dict:
             f"{n}. {p['name'].split('/')[-1]}: {p['url']}" for n, p in enumerate(picked, 1))
     else:
         sb.pop("repos", None)
+        sb["headline"] = " ".join(str(sb.get("headline") or "").split())[:34] if countdown else ""
+        sb["subline"] = " ".join(str(sb.get("subline") or "").split())[:44] if countdown else ""
     polish_package(sb)
     return sb
 
@@ -1901,6 +1920,11 @@ def crossfade_all(parts: list[Path], lengths: list[float], dest: Path, fade_ends
     return starts
 
 
+def subtitled(scene: dict) -> bool:
+    """This scene's narration is shown as spoken-word subtitles."""
+    return bool(SUBTITLES and scene.get("spoken") and scene.get("narration"))
+
+
 def ass_time(t: float) -> str:
     h, rem = divmod(max(t, 0), 3600)
     m, s = divmod(rem, 60)
@@ -1926,6 +1950,8 @@ Style: Cap,{FONT},{64 if FILM else 78},&H00FFFFFF,&H00FFFFFF,&H00000000,&H640000
 Style: End,{FONT},92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,6,2,5,110,110,0,1
 Style: Title,{FONT},96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,0,0,5,160,160,0,1
 Style: Pill,{FONT},{58 if FILM else 68},&H00141414,&H00141414,&H0033D6FF,&H0033D6FF,-1,0,0,0,100,100,1,0,3,14,0,2,90,90,{90 if FILM else 520},1
+Style: Sub,{FONT},{70 if FILM else 92},&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,-1,-1,0,0,100,100,0,0,1,7,3,2,80,80,{90 if FILM else 520},1
+Style: PillTop,{FONT},{54 if FILM else 62},&H00141414,&H00141414,&H0033D6FF,&H0033D6FF,-1,0,0,0,100,100,1,0,3,12,0,8,90,90,{190 if FILM else 400},1
 Style: Head,{FONT},{60 if FILM else 74},&H00FFFFFF,&H00FFFFFF,&H1E101010,&H1E101010,-1,0,0,0,100,100,1,0,3,18,0,8,80,80,{60 if FILM else 190},1
 Style: Tag,{FONT},44,&H00B4B4B4,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4,0,1,3,0,2,90,90,{220 if FILM else 300},1
 
@@ -1946,8 +1972,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                   if ANIMATED else  # cartoon captions pop in with a bounce
                   "\\fad(280,220)\\t(0,280,\\fscx104\\fscy104)\\t(280,500,\\fscx100\\fscy100)")
             # a numbered item ("#3 Cap replaces Loom") is a yellow label, like a sticker on the video
-            style = "Pill" if re.match(r"#\s*\d", cap) else "Cap"
-            lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},{style},,0,0,0,,{{{fx}}}{cap}")
+            numbered = bool(re.match(r"#\s*\d", cap))
+            if subtitled(s) and not numbered:
+                cap = ""  # the spoken words are on screen instead
+            style = ("PillTop" if subtitled(s) else "Pill") if numbered else "Cap"
+            if cap:
+                lines.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},{style},,0,0,0,,{{{fx}}}{cap}")
+        if subtitled(s):  # the narration, three words at a time, in step with the voice
+            at = t + 0.05 + (VOICE_LEAD if s is scenes[0] else 0.0)
+            words, chunks, cur = s["narration"].split(), [], []
+            for w in words:
+                if cur and (len(cur) >= 3 or len(" ".join(cur + [w])) > 17):
+                    chunks.append(" ".join(cur))
+                    cur = []
+                cur.append(w)
+            chunks.append(" ".join(cur))
+            weight = [len(c) + 2 for c in chunks]
+            for c, w in zip(chunks, weight):
+                dur = s["spoken"] * w / sum(weight)
+                lines.append(f"Dialogue: 0,{ass_time(at)},{ass_time(at + dur)},Sub,,0,0,0,,"
+                             f"{{\\fscx86\\fscy86\\t(0,90,\\fscx100\\fscy100)}}{ass_escape(c)}")
+                at += dur
     lines += progress_dots(scenes, starts, end_start)
     if headline:  # list videos: what the video is, on top from the first frame to the closing line
         text = ass_escape(headline) + (f"\\N{{\\fs{38 if FILM else 46}\\1c&H5A5AFF&}}{ass_escape(subline)}" if subline else "")
@@ -2235,13 +2280,14 @@ def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
     # breath. No noise filter: spectral denoising made the cloned voice sound metallic and robotic.
     clean_take = (f"highpass=f=60,{trim},areverse,{trim},areverse,"
                   "silenceremove=stop_periods=-1:stop_duration=0.35:stop_threshold=-50dB")  # pauses: 0.35 s at most
-    pre, post, takes, report_voices = 0.05, 0.2, {}, []
+    pre, post, takes, report_voices, narr = 0.05, 0.2, {}, [], {}
     for i, s in enumerate(scenes):
         if s["narration"]:
             takes[i] = out / f"take_{i:02d}.wav"
             ff("-i", str(out / f"line_{i:02d}.wav"), "-af", clean_take, "-ar", "44100", "-ac", "1", str(takes[i]))
             if audio_seconds(takes[i]) < 0.4:
                 raise ValueError(f"line {i + 1} came out empty")
+            narr[i] = audio_seconds(takes[i])
             raw_say = out / f"say_{i:02d}.wav"
             if i in says and raw_say.exists():  # the character speaks right after the narrator's line
                 kind, say = s["dialogue_voice"], out / f"said_{i:02d}.wav"
@@ -2268,6 +2314,7 @@ def cloned_voice(sb: dict, sample: Path, work: Path) -> Path:
         if i in takes:
             spoken = audio_seconds(takes[i]) / (tempo if tempo > 1.02 else 1.0)
             s["seconds"] = round(max(1.8, pre + spoken + post), 2)
+            s["spoken"] = round(narr[i] / (tempo if tempo > 1.02 else 1.0), 2)  # for the subtitles
             fx = (f"atempo={tempo:.3f}," if tempo > 1.02 else "") + (
                 f"afade=t=in:d=0.02,afade=t=out:st={max(0.0, spoken - 0.05):.2f}:d=0.05,"
                 f"adelay={int(pre * 1000)},apad=whole_dur={s['seconds']:.2f}")

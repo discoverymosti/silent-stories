@@ -1,7 +1,10 @@
-# Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, repos, news).
+# Discovery Mosti TECH idea queue: one per line, "genre | idea" (explainer, tip, product, list, myths, hacks, versus, repos, news).
 # The top line is used next. When fewer than 5 are left the AI adds more, and one fresh tech news
 # story (Hacker News front page) is put on top at most once a day.
 repos | Free open-source projects on GitHub that replace paid apps
+myths | 4 tech myths busted: more megapixels always mean better photos; charging a modern phone overnight ruins its battery; private or incognito browsing makes you anonymous online; swiping away background apps saves battery.
+hacks | 3 phone tricks most people never try: press a volume button to take a photo, long-press on the camera screen to lock focus and brightness, and scan a paper document straight into a PDF with the built-in files or notes app.
+versus | x86 versus ARM processors: why the chip design from phones is moving into laptops, what each one does better, and what it changes for the apps people use.
 tip | Holding down the spacebar on mobile virtual keyboards instantly turns the whole key grid into a precise trackpad for fast text editing.
 tip | Turning off browser hardware acceleration frees up gigabytes of computer memory and stops cooling fans from spinning up during basic web browsing.
 list | 5 free open-source media utilities—VLC, HandBrake, Audacity, Blender, and OBS Studio—that replace thousands of dollars in commercial video, audio, and 3D creation software.

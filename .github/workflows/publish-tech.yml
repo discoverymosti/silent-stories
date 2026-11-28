@@ -136,6 +136,8 @@ jobs:
           # no YT_REFRESH_TOKEN here: that secret belongs to the main channel; TECH uses channels/tech/yt_token.enc
           YT_PRIVACY: ${{ vars.YT_PRIVACY || 'public' }}
           CHANNEL: tech
+          # the narration on screen a few words at a time, in step with the voice (off = short captions only)
+          SUBTITLES: ${{ vars.TECH_SUBTITLES || 'on' }}
           # 'repos' videos read real project facts from GitHub's public search
           GITHUB_TOKEN: ${{ github.token }}
           CHANNEL_NAME: ${{ vars.TECH_CHANNEL_NAME || 'Discovery Mosti TECH' }}
